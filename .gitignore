@@ -43,6 +43,10 @@ bootstrap.py
 build.log
 
 # Documentation (optional - remove if publishing)
-# SOCIAL_MEDIA_POSTS.md
-# BUILD_SUCCESS.md
-# BUILD_TOOLS_SETUP.md
+SOCIAL_MEDIA_POSTS.md
+BUILD_SUCCESS.md
+BUILD_TOOLS_SETUP.md
+GITHUB_PUSH_GUIDE.md
+FINAL_SUMMARY.md
+00_START_HERE_PUSH.md
+LAUNCH_CHECKLIST.md
