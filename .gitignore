@@ -1,0 +1,48 @@
+# Rust
+target/
+Cargo.lock
+*.rlib
+*.rmeta
+*.so
+*.dylib
+*.dll
+*.exe
+*.pdb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local dev files
+*.log
+.env
+.env.local
+
+# Build artifacts
+/build/
+/dist/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Setup scripts (dev only)
+setup.py
+setup.bat
+bootstrap.py
+build.log
+
+# Documentation (optional - remove if publishing)
+# SOCIAL_MEDIA_POSTS.md
+# BUILD_SUCCESS.md
+# BUILD_TOOLS_SETUP.md
