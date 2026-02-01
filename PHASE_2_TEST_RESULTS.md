@@ -93,17 +93,17 @@
 ✅ Threat database initialized
 
 📡 Available Network Devices:
-   - \Device\NPF_{4074FFA8-80C1-447A-A574-8D6DD1FD8AC3} - WAN Miniport (Network Monitor)
-   - \Device\NPF_{6462B64B-54E8-4080-B670-C6421416F1D1} - WAN Miniport (IPv6)
-   - \Device\NPF_{13D440F3-A358-4324-A292-1CFA155C455A} - WAN Miniport (IP)
-   - \Device\NPF_{A97B1FA6-8992-4AE5-A95A-255F409B0553} - Intel(R) Wireless-AC 9462
-   - \Device\NPF_{3B5B534C-5DB9-44EB-9123-4887B1991FEF} - Microsoft Wi-Fi Direct Virtual Adapter #4
-   - \Device\NPF_{B885CF7C-94A9-441C-AFBF-8D2BD0E2632D} - Microsoft Wi-Fi Direct Virtual Adapter #3
+   - \Device\NPF_{xx...} - WAN Miniport (Network Monitor)
+   - \Device\NPF_{xx...} - WAN Miniport (IPv6)
+   - \Device\NPF_{xxxxx} - WAN Miniport (IP)
+   - \Device\NPF_{} - Intel(R) Wireless-AC 9462
+   - \Device\NPF_{} - Microsoft Wi-Fi Direct Virtual Adapter #4
+   - \Device\NPF_{} - Microsoft Wi-Fi Direct Virtual Adapter #3
    - \Device\NPF_Loopback - Adapter for loopback traffic capture
 
 🚀 Initializing Packet Capture...
 
-📡 Using device: \Device\NPF_{4074FFA8-80C1-447A-A574-8D6DD1FD8AC3}
+📡 Using device: \Device\NPF_{}
    Description: WAN Miniport (Network Monitor)
 
 🚀 Starting Packet Capture (Press Ctrl+C to stop)...
