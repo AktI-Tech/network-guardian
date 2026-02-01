@@ -1,5 +1,4 @@
 use std::net::IpAddr;
-use std::str::FromStr;
 use chrono::Local;
 
 #[cfg(feature = "packet-capture")]
@@ -43,9 +42,6 @@ impl PacketSniffer {
         #[cfg(not(feature = "packet-capture"))]
         {
             println!("📡 Running in MOCK mode (Npcap SDK not available)");
-            println!("   To enable real packet capture:");
-            println!("   1. Install Npcap SDK from: https://github.com/nmap/npcap/releases");
-            println!("   2. Build with: cargo build --features packet-capture");
             Ok(Self { mock_mode: true })
         }
     }
@@ -63,35 +59,60 @@ impl PacketSniffer {
                 println!("✅ Packet capture started on {}", device.name);
                 println!("   Listening for network traffic...\n");
                 
-                // Set filter to capture IP packets
                 cap.filter("ip", true)?;
                 
                 let mut packet_count = 0;
-                let mut capture = cap;
-            
-            loop {
-                match capture.next_packet() {
-                    Ok(packet) => {
-                        packet_count += 1;
-                        if let Some(packet_info) = Self::parse_packet(packet.data) {
-                            println!("📦 Packet #{}: {} -> {} ({})",
-                                packet_count,
-                                packet_info.src_ip.unwrap_or_else(|| "N/A".parse().unwrap()),
-                                packet_info.dst_ip.unwrap_or_else(|| "N/A".parse().unwrap()),
-                                packet_info.protocol
-                            );
+                loop {
+                    match cap.next_packet() {
+                        Ok(packet) => {
+                            packet_count += 1;
+                            if let Some(packet_info) = Self::parse_packet(packet.data) {
+                                println!("📦 Packet #{}: {} -> {} ({})",
+                                    packet_count,
+                                    packet_info.src_ip.unwrap_or_else(|| "N/A".parse().unwrap()),
+                                    packet_info.dst_ip.unwrap_or_else(|| "N/A".parse().unwrap()),
+                                    packet_info.protocol
+                                );
+                            }
+                            
+                            if packet_count % 100 == 0 {
+                                tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+                            }
                         }
-                        
-                        // Every 100 packets, yield to prevent blocking
-                        if packet_count % 100 == 0 {
-                            tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+                        Err(e) => {
+                            eprintln!("Capture error: {}", e);
+                            break;
                         }
-                    }
-                    Err(e) => {
-                        eprintln!("Capture error: {}", e);
-                        break;
                     }
                 }
+            }
+        }
+        
+        #[cfg(not(feature = "packet-capture"))]
+        {
+            println!("✅ Mock packet capture started");
+            println!("   Simulating network traffic...\n");
+            
+            let mock_packets = vec![
+                ("192.168.1.100", "8.8.8.8", 54321, 53, "DNS", "UDP"),
+                ("192.168.1.101", "172.217.16.142", 55432, 443, "HTTPS", "TCP"),
+                ("192.168.1.102", "93.184.216.34", 49152, 80, "HTTP", "TCP"),
+            ];
+            
+            let mut packet_count = 0;
+            loop {
+                packet_count += 1;
+                let mock = &mock_packets[(packet_count - 1) % mock_packets.len()];
+                
+                println!("📦 Packet #{}: {} -> {}:{} ({})",
+                    packet_count,
+                    mock.0,
+                    mock.1,
+                    mock.3,
+                    mock.5
+                );
+                
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
             }
         }
         
@@ -99,22 +120,20 @@ impl PacketSniffer {
     }
     
     /// Parse packet data to extract protocol information
+    #[cfg(feature = "packet-capture")]
     fn parse_packet(data: &[u8]) -> Option<PacketInfo> {
         if data.len() < 20 {
             return None;
         }
         
-        // Check IP version (first nibble of first byte)
         let version = data[0] >> 4;
         if version != 4 {
-            return None; // Only IPv4 for now
+            return None;
         }
         
-        // Extract source and destination IPs (bytes 12-15 and 16-19)
         let src_ip = IpAddr::from([data[12], data[13], data[14], data[15]]);
         let dst_ip = IpAddr::from([data[16], data[17], data[18], data[19]]);
         
-        // Get protocol (byte 9)
         let protocol_num = data[9];
         let protocol = match protocol_num {
             6 => "TCP".to_string(),
@@ -123,7 +142,6 @@ impl PacketSniffer {
             _ => format!("OTHER({})", protocol_num),
         };
         
-        // Extract ports for TCP/UDP (if present)
         let (src_port, dst_port) = if data.len() >= 24 && (protocol_num == 6 || protocol_num == 17) {
             let src = u16::from_be_bytes([data[20], data[21]]);
             let dst = u16::from_be_bytes([data[22], data[23]]);
@@ -139,21 +157,34 @@ impl PacketSniffer {
             dst_port,
             protocol,
             length: data.len() as u32,
-            timestamp: chrono::Local::now(),
+            timestamp: Local::now(),
         })
     }
     
     /// Get available network devices
+    #[cfg(feature = "packet-capture")]
     pub fn list_devices() -> Result<Vec<String>, String> {
         let devices = pcap::Device::list()
             .map_err(|e| format!("Failed to list devices: {}", e))?;
         
         Ok(devices.iter().map(|d| format!("{} - {}", d.name, d.desc.as_deref().unwrap_or("N/A"))).collect())
     }
+    
+    #[cfg(not(feature = "packet-capture"))]
+    pub fn list_devices() -> Result<Vec<String>, String> {
+        Ok(vec!["[MOCK] eth0 - Mock Ethernet Device".to_string()])
+    }
 }
 
 impl Default for PacketSniffer {
     fn default() -> Self {
-        Self { device: None }
+        #[cfg(feature = "packet-capture")]
+        {
+            Self { device: None }
+        }
+        #[cfg(not(feature = "packet-capture"))]
+        {
+            Self { mock_mode: false }
+        }
     }
 }
