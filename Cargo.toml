@@ -16,6 +16,18 @@ futures = "0.3"
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 
+# Phase 2: Packet Capture & Storage
+# pcap requires Npcap on Windows - make it optional
+pcap = { version = "1.1", optional = true }
+rusqlite = { version = "0.30", features = ["bundled"] }
+
+# Phase 2: Notifications
+notify-rust = "4.10"
+
+# Phase 2: Dashboard (optional - can be added later)
+# egui = "0.27"
+# egui-wgpu = "0.27"
+
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.52", features = ["Win32_NetworkManagement_IpHelper", "Win32_Foundation", "Win32_System_Com"] }
 
@@ -23,3 +35,6 @@ windows = { version = "0.52", features = ["Win32_NetworkManagement_IpHelper", "W
 name = "network_guardian"
 path = "src/main.rs"
 
+[features]
+# Enable packet capture (requires Npcap on Windows or libpcap-dev on Linux)
+packet-capture = ["pcap"]

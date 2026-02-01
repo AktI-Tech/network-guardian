@@ -29,6 +29,18 @@ pub struct ThreatAlert {
     pub timestamp: DateTime<Local>,
 }
 
+impl ThreatAlert {
+    pub fn is_critical(&self) -> bool {
+        self.severity == ThreatSeverity::Critical
+    }
+    
+    pub fn should_notify(&self) -> bool {
+        matches!(self.severity, 
+            ThreatSeverity::Critical | ThreatSeverity::High
+        )
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkEvent {
     pub event_type: String,
