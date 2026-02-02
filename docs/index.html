@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Network Guardian - Real-time network security monitoring tool. Packet capture, threat detection, and live alerts.">
+    <meta name="keywords" content="network security, packet capture, threat detection, monitoring">
+    <title>Network Guardian - Release Blog</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        nav {
+            background: white;
+            padding: 15px 20px;
+            margin-bottom: 30px;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        nav a {
+            text-decoration: none;
+            color: #667eea;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        
+        nav a:hover {
+            color: #764ba2;
+        }
+        
+        .hero {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .hero h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        
+        .releases {
+            display: grid;
+            gap: 20px;
+        }
+        
+        .release-card {
+            background: white;
+            padding: 25px;
+            border-left: 4px solid #667eea;
+            border-radius: 5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .release-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .release-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .release-card h3 {
+            color: #333;
+            font-size: 1.5em;
+        }
+        
+        .release-date {
+            color: #999;
+            font-size: 0.9em;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin: 2px;
+        }
+        
+        .badge-phase {
+            background: #667eea;
+            color: white;
+        }
+        
+        .badge-status {
+            background: #10b981;
+            color: white;
+        }
+        
+        .feature-list {
+            margin: 15px 0;
+            padding-left: 20px;
+        }
+        
+        .feature-list li {
+            margin: 8px 0;
+            color: #555;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 1.8em;
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        .stat-label {
+            font-size: 0.9em;
+            color: #999;
+            margin-top: 5px;
+        }
+        
+        footer {
+            background: #333;
+            color: white;
+            text-align: center;
+            padding: 20px;
+            margin-top: 40px;
+        }
+        
+        .links {
+            margin-top: 15px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .links a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .links a:hover {
+            text-decoration: underline;
+        }
+        
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #d63384;
+        }
+        
+        .tech-stack {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+        
+        .tech-tag {
+            background: #e0e7ff;
+            color: #667eea;
+            padding: 8px 12px;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🛡️ Network Guardian</h1>
+        <p>Real-time Network Security Monitoring & Threat Detection</p>
+    </header>
+    
+    <div class="container">
+        <nav>
+            <a href="#releases">📰 Releases</a>
+            <a href="https://github.com/AktI-Tech/network-guardian" target="_blank">💻 GitHub</a>
+            <a href="#about">ℹ️ About</a>
+            <a href="#roadmap">🗺️ Roadmap</a>
+        </nav>
+        
+        <section class="hero">
+            <h2>Welcome to Network Guardian</h2>
+            <p>
+                <strong>Network Guardian</strong> is a powerful real-time network security monitoring tool built in Rust. 
+                It captures live network packets, detects threats using advanced algorithms, logs incidents to a persistent database, 
+                and sends immediate alerts when suspicious activity is detected.
+            </p>
+            <p style="margin-top: 15px;">
+                With an intuitive interface and enterprise-grade capabilities, Network Guardian helps you maintain visibility 
+                and control over your network security posture.
+            </p>
+        </section>
+        
+        <section id="releases">
+            <h2 style="margin-bottom: 20px; color: #333;">📰 Release History</h2>
+            <div class="releases">
+                <!-- Release 2.1 -->
+                <div class="release-card">
+                    <div class="release-header">
+                        <div>
+                            <h3>Phase 2.1 - Functional Backend Pipeline</h3>
+                            <p class="release-date">Released: February 2, 2026</p>
+                        </div>
+                        <div>
+                            <span class="badge badge-phase">Phase 2.1</span>
+                            <span class="badge badge-status">✅ COMPLETE</span>
+                        </div>
+                    </div>
+                    
+                    <p><strong>🎯 Objective:</strong> Transform Network Guardian from a mockup into a fully functional end-to-end application with integrated components.</p>
+                    
+                    <p style="margin-top: 15px;"><strong>✨ Key Features:</strong></p>
+                    <ul class="feature-list">
+                        <li>✅ Real-time packet capture (600+ packets tested)</li>
+                        <li>✅ Async message channels connecting all components</li>
+                        <li>✅ Live threat detection on captured packets</li>
+                        <li>✅ SQLite database logging of threats</li>
+                        <li>✅ Desktop notifications for high-severity alerts</li>
+                        <li>✅ IPv4 and IPv6 support</li>
+                    </ul>
+                    
+                    <p style="margin-top: 15px;"><strong>🏗️ Architecture:</strong></p>
+                    <p style="font-family: monospace; background: #f4f4f4; padding: 10px; border-radius: 3px; margin: 10px 0;">
+                        Npcap → PacketSniffer → Channel → ThreatDetector → Channel → Database + Notifications
+                    </p>
+                    
+                    <p style="margin-top: 15px;"><strong>📊 Testing Results:</strong></p>
+                    <div class="stats">
+                        <div class="stat-item">
+                            <div class="stat-value">600+</div>
+                            <div class="stat-label">Packets Captured</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">2+</div>
+                            <div class="stat-label">Threats Detected</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">3.23MB</div>
+                            <div class="stat-label">Binary Size</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">0</div>
+                            <div class="stat-label">Errors</div>
+                        </div>
+                    </div>
+                    
+                    <p style="margin-top: 15px;"><strong>📝 Files Modified:</strong></p>
+                    <ul class="feature-list">
+                        <li><code>src/main.rs</code> - Complete rewrite with async channels</li>
+                        <li><code>src/packet_capture.rs</code> - Enhanced IPv4/IPv6 parsing + async send</li>
+                        <li><code>src/threat_detection.rs</code> - Real threat detection logic</li>
+                    </ul>
+                    
+                    <p style="margin-top: 15px;"><strong>🛠️ Tech Stack:</strong></p>
+                    <div class="tech-stack">
+                        <div class="tech-tag">Rust</div>
+                        <div class="tech-tag">Tokio (Async)</div>
+                        <div class="tech-tag">PCap</div>
+                        <div class="tech-tag">SQLite</div>
+                        <div class="tech-tag">IPv4/IPv6</div>
+                    </div>
+                    
+                    <div class="links" style="margin-top: 15px;">
+                        <a href="https://github.com/AktI-Tech/network-guardian/commit/c13b9b0" target="_blank">View Commit →</a>
+                    </div>
+                </div>
+                
+                <!-- Release 2.0 -->
+                <div class="release-card">
+                    <div class="release-header">
+                        <div>
+                            <h3>Phase 2 - Packet Capture & Monitoring</h3>
+                            <p class="release-date">Released: January 15, 2026</p>
+                        </div>
+                        <div>
+                            <span class="badge badge-phase">Phase 2</span>
+                            <span class="badge badge-status">✅ COMPLETE</span>
+                        </div>
+                    </div>
+                    
+                    <p><strong>🎯 Objective:</strong> Add packet capture, threat detection, database logging, and notifications to Phase 1 foundation.</p>
+                    
+                    <p style="margin-top: 15px;"><strong>✨ Components Built:</strong></p>
+                    <ul class="feature-list">
+                        <li>Packet capture module with Npcap/libpcap integration</li>
+                        <li>SQLite threat database with persistence</li>
+                        <li>Desktop notification system</li>
+                        <li>Real-time threat detection algorithms</li>
+                        <li>Mock mode for testing without SDK</li>
+                    </ul>
+                    
+                    <p style="margin-top: 15px;"><strong>⚠️ Status at Completion:</strong></p>
+                    <p>Modules built but not integrated - code review revealed disconnected architecture. Led to Phase 2.1 initiative.</p>
+                    
+                    <div class="links" style="margin-top: 15px;">
+                        <a href="https://github.com/AktI-Tech/network-guardian" target="_blank">View on GitHub →</a>
+                    </div>
+                </div>
+                
+                <!-- Release 1.0 -->
+                <div class="release-card">
+                    <div class="release-header">
+                        <div>
+                            <h3>Phase 1 - Foundation & Basic Detection</h3>
+                            <p class="release-date">Released: December 2025</p>
+                        </div>
+                        <div>
+                            <span class="badge badge-phase">Phase 1</span>
+                            <span class="badge badge-status">✅ COMPLETE</span>
+                        </div>
+                    </div>
+                    
+                    <p><strong>🎯 Objective:</strong> Build foundational architecture with basic threat detection.</p>
+                    
+                    <p style="margin-top: 15px;"><strong>✨ Deliverables:</strong></p>
+                    <ul class="feature-list">
+                        <li>Core project structure in Rust</li>
+                        <li>Threat detection module with multiple algorithms</li>
+                        <li>Network monitoring capabilities</li>
+                        <li>UI/CLI interface</li>
+                        <li>Comprehensive project documentation</li>
+                    </ul>
+                    
+                    <div class="links" style="margin-top: 15px;">
+                        <a href="https://github.com/AktI-Tech/network-guardian" target="_blank">View on GitHub →</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section id="about" style="margin-top: 40px;">
+            <div class="release-card" style="border-left-color: #764ba2;">
+                <h3 style="color: #764ba2; margin-bottom: 15px;">About Network Guardian</h3>
+                <p>
+                    Network Guardian is a real-time network security monitoring tool designed for professionals who need visibility 
+                    into network traffic and immediate alerts on suspicious activity. Built with performance and reliability in mind, 
+                    it leverages Rust's safety guarantees and async/await patterns for efficient concurrent processing.
+                </p>
+                <p style="margin-top: 15px;">
+                    <strong>Key Capabilities:</strong>
+                </p>
+                <ul class="feature-list">
+                    <li>📡 Real-time packet capture from network interfaces</li>
+                    <li>🔍 Advanced threat detection algorithms</li>
+                    <li>💾 Persistent threat logging with SQLite</li>
+                    <li>🔔 Instant desktop notifications</li>
+                    <li>🌐 Support for IPv4 and IPv6 traffic</li>
+                    <li>⚡ Optimized async/await architecture</li>
+                    <li>🔧 Cross-platform compatibility (Windows, Linux)</li>
+                </ul>
+            </div>
+        </section>
+        
+        <section id="roadmap" style="margin-top: 40px;">
+            <div class="release-card" style="border-left-color: #10b981;">
+                <h3 style="color: #10b981; margin-bottom: 15px;">🗺️ Roadmap</h3>
+                
+                <p style="margin-top: 15px;"><strong>Phase 3 - GUI Dashboard (In Development)</strong></p>
+                <ul class="feature-list">
+                    <li>Real-time packet statistics dashboard</li>
+                    <li>Threat timeline visualization</li>
+                    <li>System tray integration</li>
+                    <li>Windows Event Log integration</li>
+                    <li>Export functionality (CSV/JSON)</li>
+                </ul>
+                
+                <p style="margin-top: 15px;"><strong>Phase 4+ - Advanced Features</strong></p>
+                <ul class="feature-list">
+                    <li>Machine learning threat classification</li>
+                    <li>Behavioral analysis engine</li>
+                    <li>Network anomaly detection</li>
+                    <li>Custom alert rules</li>
+                    <li>Mobile app integration</li>
+                </ul>
+            </div>
+        </section>
+        
+        <section style="margin-top: 40px;">
+            <div style="background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center;">
+                <h3>Get Started</h3>
+                <p style="margin: 15px 0; color: #666;">
+                    Network Guardian is open source and available on GitHub. 
+                    Clone the repository, build the project, and start monitoring your network.
+                </p>
+                <div class="links">
+                    <a href="https://github.com/AktI-Tech/network-guardian" target="_blank" style="display: inline-block; background: #667eea; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none;">View on GitHub</a>
+                    <a href="https://github.com/AktI-Tech/network-guardian#readme" target="_blank" style="display: inline-block; background: #764ba2; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none;">Read Documentation</a>
+                </div>
+            </div>
+        </section>
+    </div>
+    
+    <footer>
+        <p>&copy; 2026 Network Guardian - Real-time Network Security Monitoring</p>
+        <p style="font-size: 0.9em; margin-top: 10px; color: #999;">
+            Built with Rust | Powered by Tokio, PCap, and SQLite
+        </p>
+        <div class="links" style="margin-top: 10px;">
+            <a href="https://github.com/AktI-Tech/network-guardian" target="_blank">GitHub</a>
+            <a href="https://github.com/AktI-Tech" target="_blank">Author</a>
+        </div>
+    </footer>
+</body>
+</html>
