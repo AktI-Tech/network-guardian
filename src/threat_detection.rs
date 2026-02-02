@@ -1,4 +1,5 @@
 use crate::models::{ThreatAlert, ThreatType, ThreatSeverity};
+use crate::packet_capture::PacketInfo;
 use std::collections::HashMap;
 use std::net::IpAddr;
 
@@ -6,6 +7,8 @@ pub struct ThreatDetector {
     arp_table: HashMap<IpAddr, String>, // IP -> MAC mapping
     baseline_traffic: TrafficBaseline,
     dns_cache: DnsCache,
+    suspicious_port_connections: HashMap<u16, usize>, // port -> count
+    packet_count: usize,
 }
 
 struct TrafficBaseline {
@@ -30,7 +33,85 @@ impl ThreatDetector {
             dns_cache: DnsCache {
                 responses: HashMap::new(),
             },
+            suspicious_port_connections: HashMap::new(),
+            packet_count: 0,
         }
+    }
+    
+    /// Analyze a packet for threats - main entry point for real packets
+    pub fn analyze_packet(&mut self, packet: &PacketInfo) -> Option<ThreatAlert> {
+        self.packet_count += 1;
+        
+        // For now, just track high packet volume as a potential threat signal
+        if self.packet_count % 100 == 0 {
+            return Some(ThreatAlert {
+                threat_type: ThreatType::TrafficAnomaly,
+                severity: ThreatSeverity::Low,
+                ip: packet.src_ip,
+                description: format!(
+                    "High packet volume detected: {} packets captured so far",
+                    self.packet_count
+                ),
+                timestamp: chrono::Local::now(),
+            });
+        }
+        
+        // Check for suspicious port access if we have port information
+        if let Some(dst_port) = packet.dst_port {
+            if self.is_suspicious_port(dst_port) {
+                let count = self.suspicious_port_connections.entry(dst_port).or_insert(0);
+                *count += 1;
+                
+                if *count > 3 {  // Alert after 3 attempts
+                    return Some(ThreatAlert {
+                        threat_type: ThreatType::TrafficAnomaly,
+                        severity: ThreatSeverity::High,
+                        ip: packet.dst_ip,
+                        description: format!(
+                            "Suspicious port access detected: {} accessing port {} ({} times)",
+                            packet.src_ip.unwrap_or_else(|| "Unknown".parse().unwrap()),
+                            dst_port,
+                            count
+                        ),
+                        timestamp: chrono::Local::now(),
+                    });
+                }
+            }
+        }
+        
+        // Check for traffic anomalies (unusually large packets)
+        if packet.length > 65000 {  // Jumbo packet or fragmented attack
+            return Some(ThreatAlert {
+                threat_type: ThreatType::TrafficAnomaly,
+                severity: ThreatSeverity::Medium,
+                ip: packet.src_ip,
+                description: format!(
+                    "Abnormally large packet detected: {} bytes",
+                    packet.length
+                ),
+                timestamp: chrono::Local::now(),
+            });
+        }
+        
+        None
+    }
+    
+    fn is_suspicious_port(&self, port: u16) -> bool {
+        // Common ports used for attacks/exploitation
+        matches!(port, 
+            21 |    // FTP
+            23 |    // Telnet
+            69 |    // TFTP
+            135 |   // RPC Endpoint Mapper
+            139 |   // NetBIOS
+            445 |   // SMB
+            3389 |  // RDP
+            4444 |  // Trojan
+            5555 |  // Oracle
+            8888 |  // Alternative HTTP
+            9999 |  // Issa
+            9050    // SOCKS proxy
+        )
     }
     
     /// Detect ARP spoofing by monitoring IP-MAC mappings

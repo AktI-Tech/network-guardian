@@ -9,6 +9,13 @@ mod packet_capture;
 mod threat_database;
 mod notifications;
 
+use std::sync::Arc;
+use tokio::sync::mpsc;
+use crate::models::ThreatAlert;
+use crate::packet_capture::PacketInfo;
+use crate::threat_database::ThreatDatabase;
+use crate::threat_detection::ThreatDetector;
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -17,10 +24,10 @@ async fn main() {
     println!("═══════════════════════════════════════════════════════════════\n");
     
     // Initialize threat database
-    let _db = match threat_database::ThreatDatabase::new("threats.db") {
+    let db = match ThreatDatabase::new("threats.db") {
         Ok(db) => {
             println!("✅ Threat database initialized");
-            db
+            Arc::new(db)
         }
         Err(e) => {
             eprintln!("❌ Failed to initialize database: {}", e);
@@ -54,23 +61,75 @@ async fn main() {
             }
         };
         
-        // Start network monitor
-        let monitor = network_monitor::NetworkMonitor::new();
+        // Create message channels for data flow
+        let (packet_tx, mut packet_rx) = mpsc::channel::<PacketInfo>(1000);
+        let (threat_tx, mut threat_rx) = mpsc::channel::<ThreatAlert>(100);
         
-        // Start monitoring in background
-        let monitor_handle = tokio::spawn(async move {
-            if let Err(e) = monitor.run().await {
-                eprintln!("Monitor error: {}", e);
+        // Task 1: Packet capture sends packets through channel
+        let sniffer_handle = tokio::spawn(async move {
+            println!("📦 Starting Packet Capture (Press Ctrl+C to stop)...\n");
+            if let Err(e) = sniffer.start_capture_and_send(packet_tx).await {
+                eprintln!("❌ Packet capture error: {}", e);
             }
         });
         
-        // Start packet capture
-        println!("\n📦 Starting Packet Capture (Press Ctrl+C to stop)...\n");
-        if let Err(e) = sniffer.start_capture().await {
-            eprintln!("❌ Packet capture error: {}", e);
-        }
+        // Task 2: Threat detection receives packets and generates alerts
+        let threat_handle = tokio::spawn(async move {
+            let mut detector = ThreatDetector::new();
+            println!("🔍 Threat detection engine started\n");
+            
+            while let Some(packet) = packet_rx.recv().await {
+                // Analyze each packet for threats
+                if let Some(threat) = detector.analyze_packet(&packet) {
+                    println!("🚨 THREAT DETECTED: {}", threat.description);
+                    if threat_tx.send(threat).await.is_err() {
+                        eprintln!("Logger channel closed");
+                        break;
+                    }
+                }
+            }
+        });
         
-        monitor_handle.abort();
+        // Main task: Database logging and notifications (synchronous on main thread)
+        println!("💾 Threat logger started\n");
+        
+        let process_threats = async {
+            while let Some(threat) = threat_rx.recv().await {
+                // Log to database
+                match db.log_threat(&threat) {
+                    Ok(id) => {
+                        println!("✅ Threat #{} logged to database", id);
+                        println!("   Type: {:?}", threat.threat_type);
+                        println!("   Severity: {:?}", threat.severity);
+                        if let Some(ip) = threat.ip {
+                            println!("   IP: {}", ip);
+                        }
+                    }
+                    Err(e) => eprintln!("❌ Database error: {}", e),
+                }
+                
+                // Send notification if high severity
+                if threat.should_notify() {
+                    match notifications::NotificationManager::notify_threat(&threat) {
+                        Ok(_) => println!("📢 Notification sent"),
+                        Err(e) => eprintln!("❌ Notification error: {}", e),
+                    }
+                }
+            }
+        };
+        
+        // Wait for sniffer and threat detection tasks
+        tokio::select! {
+            result = sniffer_handle => {
+                eprintln!("Sniffer task ended: {:?}", result);
+            }
+            result = threat_handle => {
+                eprintln!("Threat detection ended: {:?}", result);
+            }
+            _ = process_threats => {
+                eprintln!("Logger ended");
+            }
+        }
     }
     
     #[cfg(not(feature = "packet-capture"))]
