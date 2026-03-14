@@ -226,7 +226,7 @@ This project is licensed under the **MIT License** - see [LICENSE](LICENSE) file
 - **Documentation** - See docs/ folder
 - **Issues** - GitHub Issues tracker
 - **Discussions** - GitHub Discussions
-- **Email** - your-email@example.com
+- **Email** - akttechpublish***@gmail.com
 
 ---
 
