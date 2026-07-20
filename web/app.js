@@ -15,27 +15,46 @@
 
   $("filter").addEventListener("input", renderConnections);
   $("llm-only").addEventListener("change", renderConnections);
+  $("stack-only").addEventListener("change", renderConnections);
 
   function badge(cat) {
     const c = (cat || "unknown").toLowerCase();
     return `<span class="badge ${c}">${c}</span>`;
   }
 
+  function stackBadge(hint) {
+    if (!hint) return "—";
+    return `<span class="badge stack ${esc(hint)}">${esc(hint)}</span>`;
+  }
+
+  function renderEnv(status) {
+    const pills = [];
+    if (status.wsl_detected) pills.push('<span class="env-pill on">WSL</span>');
+    else pills.push('<span class="env-pill">WSL off</span>');
+    if (status.docker_detected) pills.push('<span class="env-pill on">Docker</span>');
+    else pills.push('<span class="env-pill">Docker off</span>');
+    $("env-pills").innerHTML = pills.join("");
+  }
+
   function renderConnections() {
     const q = ($("filter").value || "").toLowerCase();
     const llmOnly = $("llm-only").checked;
+    const stackOnly = $("stack-only").checked;
     const body = $("conn-body");
     const rows = connections.filter((c) => {
       const cat = (c.category || "").toLowerCase();
       if (llmOnly && cat !== "llm") return false;
+      if (stackOnly && !c.stack_hint) return false;
       if (!q) return true;
       const blob = [
         c.process_name,
         c.pid,
         c.remote_addr,
+        c.resolved_host,
         c.remote_port,
         c.category,
         c.destination_label,
+        c.stack_hint,
         c.state,
       ]
         .join(" ")
@@ -49,8 +68,10 @@
       <td>${esc(c.process_name || "—")}</td>
       <td>${c.pid ?? "—"}</td>
       <td>${esc(c.remote_addr)}</td>
+      <td title="${esc(c.resolved_host || "")}">${esc(truncate(c.resolved_host || "—", 36))}</td>
       <td>${c.remote_port}</td>
       <td>${badge(c.category)}</td>
+      <td>${stackBadge(c.stack_hint)}</td>
       <td>${esc(c.destination_label || "—")}</td>
       <td>${esc(c.state)}</td>
     </tr>`
@@ -105,8 +126,7 @@
   function shortTime(iso) {
     if (!iso) return "—";
     try {
-      const d = new Date(iso);
-      return d.toLocaleString();
+      return new Date(iso).toLocaleString();
     } catch {
       return iso;
     }
@@ -140,6 +160,7 @@
       $("status-pill").textContent = "live · " + (status.listening || "127.0.0.1");
       $("status-pill").classList.add("live");
       $("footer-meta").textContent = `v${status.version || "?"} · sample ${status.sample_interval_secs || "?"}s`;
+      renderEnv(status);
 
       renderConnections();
       renderDestinations();

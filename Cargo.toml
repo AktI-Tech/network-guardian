@@ -1,6 +1,6 @@
 [package]
 name = "network-guardian"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Local-first workstation security monitor — protecting the builders"
 license = "MIT"
@@ -34,6 +34,7 @@ notify-rust = "4.10"
 # Host process ↔ socket map
 netstat2 = "0.11"
 sysinfo = "0.33"
+dns-lookup = "2"
 
 # Local HTTP API + dashboard
 axum = "0.7"

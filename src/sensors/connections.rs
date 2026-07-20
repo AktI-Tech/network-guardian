@@ -1,15 +1,41 @@
 //! Process ↔ socket enumeration (host outbound map).
 
-use crate::destinations::classify_ip;
+use crate::destinations::{apply_process_boost, classify_ip_with_context};
 use crate::models::{ConnectionSample, DestinationCategory};
+use crate::sensors::environment::stack_hint_for_process;
 use chrono::Local;
 use netstat2::{get_sockets_info, AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo, TcpState};
 use std::collections::HashMap;
 use std::net::IpAddr;
 use sysinfo::{Pid, ProcessesToUpdate, System};
 
-/// Snapshot open TCP/UDP sockets with owning process info when available.
+/// Snapshot open TCP sockets with owning process info when available.
+/// Filters out TIME_WAIT/CLOSED noise; focuses on active outbound-ish flows.
 pub fn sample_connections() -> Result<Vec<ConnectionSample>, String> {
+    sample_connections_opts(SampleOpts::default())
+}
+
+#[derive(Debug, Clone)]
+pub struct SampleOpts {
+    /// When true, reverse-DNS unknown public IPs (cached).
+    pub reverse_dns: bool,
+    /// Max reverse-DNS lookups per sample (keeps interval responsive).
+    pub max_dns_lookups: usize,
+    /// Include TIME_WAIT / CLOSED / LISTEN rows.
+    pub include_idle: bool,
+}
+
+impl Default for SampleOpts {
+    fn default() -> Self {
+        Self {
+            reverse_dns: true,
+            max_dns_lookups: 24,
+            include_idle: false,
+        }
+    }
+}
+
+pub fn sample_connections_opts(opts: SampleOpts) -> Result<Vec<ConnectionSample>, String> {
     let af = AddressFamilyFlags::IPV4 | AddressFamilyFlags::IPV6;
     let proto = ProtocolFlags::TCP | ProtocolFlags::UDP;
 
@@ -21,16 +47,20 @@ pub fn sample_connections() -> Result<Vec<ConnectionSample>, String> {
 
     let mut out = Vec::with_capacity(sockets.len());
     let now = Local::now();
+    let mut dns_used = 0usize;
 
     for si in sockets {
         let pids: Vec<u32> = si.associated_pids.clone();
         let (protocol, local_addr, local_port, remote_addr, remote_port, state) =
             match si.protocol_socket_info {
                 ProtocolSocketInfo::Tcp(tcp) => {
-                    // Focus on connections that have a remote peer (outbound / established-ish).
                     let remote = tcp.remote_addr;
                     let remote_port = tcp.remote_port;
                     if is_unspecified(&remote) || remote_port == 0 {
+                        continue;
+                    }
+                    let state = tcp_state_str(tcp.state).to_string();
+                    if !opts.include_idle && !is_active_state(&state) {
                         continue;
                     }
                     (
@@ -39,29 +69,48 @@ pub fn sample_connections() -> Result<Vec<ConnectionSample>, String> {
                         tcp.local_port,
                         remote.to_string(),
                         remote_port,
-                        tcp_state_str(tcp.state).to_string(),
+                        state,
                     )
                 }
-                ProtocolSocketInfo::Udp(_udp) => {
-                    // UDP often has no remote peer; skip for MVP outbound map.
-                    continue;
-                }
+                ProtocolSocketInfo::Udp(_udp) => continue,
             };
 
-        let pid = pids.first().copied();
-        let (process_name, process_path) = pid
-            .map(|p| resolve_process(&system, p))
-            .unwrap_or((None, None));
+        let pid = pids.first().copied().filter(|&p| p != 0);
+        let (process_name, process_path) = match pid {
+            Some(p) => resolve_process(&system, p),
+            None => (None, None),
+        };
+
+        // Skip system Idle TIME_WAIT leftovers if any slipped through
+        if process_name.as_deref() == Some("Idle") && pid.is_none() {
+            continue;
+        }
+
+        let stack_hint = stack_hint_for_process(process_name.as_deref(), process_path.as_deref());
 
         let remote_ip: Option<IpAddr> = remote_addr.parse().ok();
-        let classified =
-            remote_ip
-                .map(classify_ip)
-                .unwrap_or(crate::destinations::ClassifiedDestination {
-                    host_or_ip: remote_addr.clone(),
-                    category: DestinationCategory::Unknown,
-                    label: None,
-                });
+        let do_dns = opts.reverse_dns
+            && dns_used < opts.max_dns_lookups
+            && remote_ip
+                .map(|ip| !ip.is_loopback() && !is_private_quick(ip))
+                .unwrap_or(false);
+
+        let mut classified = remote_ip
+            .map(|ip| {
+                if do_dns {
+                    dns_used += 1;
+                }
+                classify_ip_with_context(ip, Some(remote_port), do_dns)
+            })
+            .unwrap_or(crate::destinations::ClassifiedDestination {
+                host_or_ip: remote_addr.clone(),
+                category: DestinationCategory::Unknown,
+                label: None,
+                resolved_host: None,
+            });
+
+        classified =
+            apply_process_boost(classified, process_name.as_deref(), stack_hint.as_deref());
 
         out.push(ConnectionSample {
             protocol,
@@ -75,12 +124,13 @@ pub fn sample_connections() -> Result<Vec<ConnectionSample>, String> {
             process_path,
             category: classified.category,
             destination_label: classified.label,
+            resolved_host: classified.resolved_host,
+            stack_hint,
             first_seen: now,
             last_seen: now,
         });
     }
 
-    // Stable-ish order for UI
     out.sort_by(|a, b| {
         a.process_name
             .cmp(&b.process_name)
@@ -89,6 +139,23 @@ pub fn sample_connections() -> Result<Vec<ConnectionSample>, String> {
     });
 
     Ok(out)
+}
+
+fn is_active_state(state: &str) -> bool {
+    matches!(
+        state,
+        "ESTABLISHED" | "SYN_SENT" | "SYN_RECEIVED" | "CLOSE_WAIT" | "FIN_WAIT1" | "FIN_WAIT2"
+    )
+}
+
+fn is_private_quick(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => v4.is_private() || v4.is_link_local(),
+        IpAddr::V6(v6) => {
+            let s = v6.segments();
+            (s[0] & 0xfe00) == 0xfc00 || (s[0] & 0xffc0) == 0xfe80
+        }
+    }
 }
 
 fn resolve_process(system: &System, pid: u32) -> (Option<String>, Option<String>) {
@@ -125,7 +192,6 @@ fn tcp_state_str(state: TcpState) -> &'static str {
     }
 }
 
-/// Deduplicate connection keys for first-seen tracking.
 pub fn connection_key(c: &ConnectionSample) -> String {
     format!(
         "{}|{}|{}|{}|{}|{}",
@@ -138,7 +204,6 @@ pub fn connection_key(c: &ConnectionSample) -> String {
     )
 }
 
-/// Group sample counts by process name for overview widgets.
 pub fn top_processes(samples: &[ConnectionSample], limit: usize) -> Vec<(String, usize)> {
     let mut map: HashMap<String, usize> = HashMap::new();
     for s in samples {
@@ -160,8 +225,19 @@ mod tests {
 
     #[test]
     fn sample_does_not_panic() {
-        // May return empty under restricted CI, but should not error on Windows/Linux desktop.
-        let result = sample_connections();
+        // Skip reverse DNS in unit tests (can be slow / network-dependent).
+        let result = sample_connections_opts(SampleOpts {
+            reverse_dns: false,
+            max_dns_lookups: 0,
+            include_idle: false,
+        });
         assert!(result.is_ok(), "unexpected error: {:?}", result.err());
+    }
+
+    #[test]
+    fn active_state_filter() {
+        assert!(is_active_state("ESTABLISHED"));
+        assert!(!is_active_state("TIME_WAIT"));
+        assert!(!is_active_state("LISTEN"));
     }
 }

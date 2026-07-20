@@ -15,11 +15,14 @@
         <p class="motto">Protecting the builders</p>
       </div>
     </div>
-    <div class="status" id="status-pill">connecting…</div>
+    <div class="header-right">
+      <div class="env-pills" id="env-pills"></div>
+      <div class="status" id="status-pill">connecting…</div>
+    </div>
   </header>
 
   <section class="cards" id="cards">
-    <div class="card"><div class="label">Connections</div><div class="value" id="c-conn">—</div></div>
+    <div class="card"><div class="label">Active connections</div><div class="value" id="c-conn">—</div></div>
     <div class="card"><div class="label">Alerts</div><div class="value" id="c-alerts">—</div></div>
     <div class="card"><div class="label">LLM flows</div><div class="value" id="c-llm">—</div></div>
     <div class="card"><div class="label">Uptime</div><div class="value" id="c-up">—</div></div>
@@ -34,8 +37,9 @@
   <main>
     <section id="panel-connections" class="panel active">
       <div class="toolbar">
-        <input type="search" id="filter" placeholder="Filter process, IP, category…" />
+        <input type="search" id="filter" placeholder="Filter process, IP, host, stack…" />
         <label class="chk"><input type="checkbox" id="llm-only" /> LLM only</label>
+        <label class="chk"><input type="checkbox" id="stack-only" /> WSL/Docker/LLM stack</label>
       </div>
       <div class="table-wrap">
         <table>
@@ -44,8 +48,10 @@
               <th>Process</th>
               <th>PID</th>
               <th>Remote</th>
+              <th>Host</th>
               <th>Port</th>
               <th>Category</th>
+              <th>Stack</th>
               <th>Label</th>
               <th>State</th>
             </tr>

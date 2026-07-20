@@ -30,6 +30,24 @@ body {
   padding: 1.25rem 1.5rem;
   border-bottom: 1px solid var(--border);
 }
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.env-pills { display: flex; gap: 0.35rem; }
+.env-pill {
+  font-size: 0.72rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: var(--panel);
+}
+.env-pill.on {
+  color: var(--ok);
+  border-color: #1f3d32;
+}
 .brand { display: flex; gap: 0.85rem; align-items: center; }
 .shield { font-size: 1.75rem; }
 h1 { margin: 0; font-size: 1.25rem; font-weight: 650; letter-spacing: 0.02em; }
@@ -129,6 +147,9 @@ tbody tr:hover { background: rgba(61, 156, 240, 0.06); }
 .badge.cloud { color: var(--accent); border-color: #1e3a5f; }
 .badge.lan, .badge.localhost { color: var(--muted); }
 .badge.unknown { color: var(--warn); border-color: #5c4a1f; }
+.badge.stack.wsl { color: #67e8f9; border-color: #164e63; }
+.badge.stack.docker { color: #60a5fa; border-color: #1e3a5f; }
+.badge.stack.llm-local { color: var(--llm); border-color: #3b2f5c; }
 .badge.High, .badge.Critical { color: var(--high); }
 .badge.Medium { color: var(--warn); }
 .badge.Low { color: var(--muted); }

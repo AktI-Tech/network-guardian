@@ -54,11 +54,13 @@ cargo run --release --features packet-capture -- monitor
 
 ## What works today
 
-- **Process ↔ socket sampling** (TCP with remote peers) via host APIs
+- **Process ↔ socket sampling** (active TCP only — filters TIME_WAIT noise)
 - **Destination categories**: `llm`, `registry`, `cloud`, `lan`, `localhost`, `unknown`
+- **Reverse DNS** (cached) so CDN IPs can map to known hosts / labels
+- **Stack hints**: `wsl`, `docker`, `llm-local` from process names + env probe
 - **SQLite** store: connections, destinations, processes, alerts
 - **Rule MVP**: first-seen unknown destinations; suspicious ports
-- **Local web dashboard** (embedded static UI)
+- **Local web dashboard** (embedded static UI) with WSL/Docker pills
 - **CLI** for stats / export / cleanup
 - Optional **Npcap** packet path with corrected Ethernet/IP parse
 

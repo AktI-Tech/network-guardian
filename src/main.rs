@@ -186,6 +186,17 @@ async fn run_serve(db: Arc<ThreatDatabase>, bind: String, sample_secs: u64) {
     println!("   Protecting the builders\n");
     println!("✅ Database: {}", DB_PATH);
 
+    let env = crate::sensors::environment::probe();
+    if env.wsl_detected {
+        println!("🐧 WSL detected");
+    }
+    if env.docker_detected {
+        println!("🐳 Docker detected");
+    }
+    for note in &env.notes {
+        println!("   · {}", note);
+    }
+
     let addr: SocketAddr = bind.parse().unwrap_or_else(|_| {
         eprintln!("Invalid bind address '{}', using {}", bind, DEFAULT_BIND);
         DEFAULT_BIND.parse().unwrap()
@@ -259,18 +270,20 @@ fn print_connections_once() {
                 return;
             }
             println!(
-                "{:<22} {:>6}  {:<40} {:>5}  {:<10} STATE",
-                "PROCESS", "PID", "REMOTE", "PORT", "CATEGORY"
+                "{:<20} {:>6}  {:<22} {:<28} {:>5}  {:<10} {:<8} STATE",
+                "PROCESS", "PID", "REMOTE", "HOST", "PORT", "CATEGORY", "STACK"
             );
-            println!("{}", "-".repeat(100));
+            println!("{}", "-".repeat(120));
             for s in samples {
                 println!(
-                    "{:<22} {:>6}  {:<40} {:>5}  {:<10} {}",
-                    truncate(s.process_name.as_deref().unwrap_or("?"), 22),
+                    "{:<20} {:>6}  {:<22} {:<28} {:>5}  {:<10} {:<8} {}",
+                    truncate(s.process_name.as_deref().unwrap_or("?"), 20),
                     s.pid.map(|p| p.to_string()).unwrap_or_else(|| "-".into()),
-                    truncate(&s.remote_addr, 40),
+                    truncate(&s.remote_addr, 22),
+                    truncate(s.resolved_host.as_deref().unwrap_or("-"), 28),
                     s.remote_port,
                     s.category.as_str(),
+                    s.stack_hint.as_deref().unwrap_or("-"),
                     s.state
                 );
             }

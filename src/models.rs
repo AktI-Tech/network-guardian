@@ -99,8 +99,19 @@ pub struct ConnectionSample {
     pub process_path: Option<String>,
     pub category: DestinationCategory,
     pub destination_label: Option<String>,
+    /// Reverse-DNS or catalog hostname when available.
+    pub resolved_host: Option<String>,
+    /// Builder stack hint: wsl | docker | llm-local
+    pub stack_hint: Option<String>,
     pub first_seen: DateTime<Local>,
     pub last_seen: DateTime<Local>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuilderEnvironment {
+    pub wsl_detected: bool,
+    pub docker_detected: bool,
+    pub notes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,4 +157,6 @@ pub struct AgentStatus {
     pub connection_count: usize,
     pub alert_count: i64,
     pub uptime_secs: u64,
+    pub wsl_detected: bool,
+    pub docker_detected: bool,
 }

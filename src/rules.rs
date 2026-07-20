@@ -145,6 +145,8 @@ mod tests {
             process_path: None,
             category: cat,
             destination_label: None,
+            resolved_host: None,
+            stack_hint: None,
             first_seen: Local::now(),
             last_seen: Local::now(),
         }

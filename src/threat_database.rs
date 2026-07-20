@@ -104,6 +104,8 @@ impl ThreatDatabase {
                     process_path TEXT,
                     category TEXT NOT NULL,
                     destination_label TEXT,
+                    resolved_host TEXT,
+                    stack_hint TEXT,
                     first_seen TEXT NOT NULL,
                     last_seen TEXT NOT NULL,
                     UNIQUE(protocol, pid, local_port, remote_addr, remote_port)
@@ -119,6 +121,9 @@ impl ThreatDatabase {
                 );
                 ",
             )?;
+            // Migrations for DBs created before v0.2.1
+            let _ = connection.execute("ALTER TABLE connections ADD COLUMN resolved_host TEXT", []);
+            let _ = connection.execute("ALTER TABLE connections ADD COLUMN stack_hint TEXT", []);
             Ok(())
         })
     }
@@ -185,14 +190,16 @@ impl ThreatDatabase {
                     "INSERT INTO connections (
                         protocol, local_addr, local_port, remote_addr, remote_port, state,
                         pid, process_name, process_path, category, destination_label,
-                        first_seen, last_seen
-                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        resolved_host, stack_hint, first_seen, last_seen
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      ON CONFLICT(protocol, pid, local_port, remote_addr, remote_port) DO UPDATE SET
                         state=excluded.state,
                         process_name=excluded.process_name,
                         process_path=excluded.process_path,
                         category=excluded.category,
                         destination_label=excluded.destination_label,
+                        resolved_host=excluded.resolved_host,
+                        stack_hint=excluded.stack_hint,
                         last_seen=excluded.last_seen",
                     params![
                         s.protocol,
@@ -206,6 +213,8 @@ impl ThreatDatabase {
                         s.process_path,
                         s.category.as_str(),
                         s.destination_label,
+                        s.resolved_host,
+                        s.stack_hint,
                         now,
                         now,
                     ],
@@ -228,7 +237,7 @@ impl ThreatDatabase {
             let mut stmt = connection.prepare(
                 "SELECT protocol, local_addr, local_port, remote_addr, remote_port, state,
                         pid, process_name, process_path, category, destination_label,
-                        first_seen, last_seen
+                        resolved_host, stack_hint, first_seen, last_seen
                  FROM connections
                  ORDER BY last_seen DESC
                  LIMIT ?",
@@ -236,8 +245,8 @@ impl ThreatDatabase {
 
             let rows = stmt
                 .query_map(params![limit], |row| {
-                    let first_seen_s: String = row.get(11)?;
-                    let last_seen_s: String = row.get(12)?;
+                    let first_seen_s: String = row.get(13)?;
+                    let last_seen_s: String = row.get(14)?;
                     let category_s: String = row.get(9)?;
                     Ok(ConnectionSample {
                         protocol: row.get(0)?,
@@ -251,6 +260,8 @@ impl ThreatDatabase {
                         process_path: row.get(8)?,
                         category: DestinationCategory::from_str_lossy(&category_s),
                         destination_label: row.get(10)?,
+                        resolved_host: row.get(11)?,
+                        stack_hint: row.get(12)?,
                         first_seen: chrono::DateTime::parse_from_rfc3339(&first_seen_s)
                             .map(|d| d.with_timezone(&Local))
                             .unwrap_or_else(|_| Local::now()),
@@ -480,6 +491,8 @@ mod tests {
             process_path: None,
             category: DestinationCategory::Unknown,
             destination_label: None,
+            resolved_host: Some("one.one.one.one".into()),
+            stack_hint: None,
             first_seen: Local::now(),
             last_seen: Local::now(),
         };

@@ -1,6 +1,7 @@
 //! Loopback HTTP API + static dashboard (privacy: bind 127.0.0.1 only by default).
 
 use crate::models::AgentStatus;
+use crate::sensors::environment;
 use crate::threat_database::ThreatDatabase;
 use axum::extract::State;
 use axum::response::{Html, IntoResponse, Json};
@@ -38,6 +39,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/alerts", get(api_alerts))
         .route("/api/destinations", get(api_destinations))
         .route("/api/stats", get(api_stats))
+        .route("/api/environment", get(api_environment))
         .layer(cors)
         .with_state(state)
 }
@@ -82,6 +84,7 @@ async fn api_status(State(state): State<AppState>) -> Json<AgentStatus> {
         .get_statistics()
         .map(|s| s.total as i64)
         .unwrap_or(0);
+    let env = environment::probe_cached();
 
     Json(AgentStatus {
         motto: "Protecting the builders".into(),
@@ -91,7 +94,13 @@ async fn api_status(State(state): State<AppState>) -> Json<AgentStatus> {
         connection_count,
         alert_count,
         uptime_secs: state.started.elapsed().as_secs(),
+        wsl_detected: env.wsl_detected,
+        docker_detected: env.docker_detected,
     })
+}
+
+async fn api_environment() -> impl IntoResponse {
+    Json(environment::probe_cached())
 }
 
 async fn api_connections(State(state): State<AppState>) -> impl IntoResponse {
