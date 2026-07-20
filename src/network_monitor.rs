@@ -1,6 +1,6 @@
-use tokio::sync::mpsc;
 use crate::models::NetworkEvent;
 use crate::threat_detection::ThreatDetector;
+use tokio::sync::mpsc;
 
 pub struct NetworkMonitor {
     tx: Option<mpsc::Sender<NetworkEvent>>,
@@ -14,7 +14,7 @@ impl NetworkMonitor {
             detector: ThreatDetector::new(),
         }
     }
-    
+
     pub async fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
         println!("Starting network monitor...");
         println!("Available interfaces:");
@@ -24,13 +24,13 @@ impl NetworkMonitor {
         self.monitor_interface().await?;
         Ok(())
     }
-    
+
     async fn monitor_interface(&self) -> Result<(), Box<dyn std::error::Error>> {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         }
     }
-    
+
     pub fn set_event_channel(&mut self, tx: mpsc::Sender<NetworkEvent>) {
         self.tx = Some(tx);
     }

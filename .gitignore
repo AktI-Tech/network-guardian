@@ -1,13 +1,13 @@
 # Rust
-target/
-Cargo.lock
-*.rlib
-*.rmeta
-*.so
-*.dylib
-*.dll
-*.exe
+/target/
+**/*.rs.bk
 *.pdb
+
+# Local runtime data
+threats.db
+threats.db-*
+*.db
+!tests/**/*.db
 
 # IDE
 .vscode/
@@ -20,7 +20,7 @@ Cargo.lock
 .DS_Store
 Thumbs.db
 
-# Local dev files
+# Local secrets / env
 *.log
 .env
 .env.local
@@ -29,24 +29,9 @@ Thumbs.db
 /build/
 /dist/
 
-# Python
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
 .pytest_cache/
-
-# Setup scripts (dev only)
-setup.py
-setup.bat
-bootstrap.py
-build.log
-
-# Documentation (optional - remove if publishing)
-SOCIAL_MEDIA_POSTS.md
-BUILD_SUCCESS.md
-BUILD_TOOLS_SETUP.md
-GITHUB_PUSH_GUIDE.md
-FINAL_SUMMARY.md
-00_START_HERE_PUSH.md
-LAUNCH_CHECKLIST.md

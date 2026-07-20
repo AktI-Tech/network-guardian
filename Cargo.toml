@@ -1,7 +1,13 @@
 [package]
 name = "network-guardian"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+description = "Local-first workstation security monitor — protecting the builders"
+license = "MIT"
+repository = "https://github.com/AktI-Tech/network-guardian"
+readme = "README.md"
+keywords = ["security", "network", "monitoring", "wsl", "privacy"]
+categories = ["command-line-utilities", "network-programming"]
 
 [dependencies]
 tokio = { version = "1.35", features = ["full"] }
@@ -16,17 +22,22 @@ futures = "0.3"
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 
-# Phase 2: Packet Capture & Storage
-# pcap requires Npcap on Windows - make it optional
+# Packet capture (optional)
 pcap = { version = "1.1", optional = true }
+
+# Storage
 rusqlite = { version = "0.30", features = ["bundled"] }
 
-# Phase 2: Notifications
+# Notifications
 notify-rust = "4.10"
 
-# Phase 2: Dashboard (optional - can be added later)
-# egui = "0.27"
-# egui-wgpu = "0.27"
+# Host process ↔ socket map
+netstat2 = "0.11"
+sysinfo = "0.33"
+
+# Local HTTP API + dashboard
+axum = "0.7"
+tower-http = { version = "0.5", features = ["cors"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.52", features = ["Win32_NetworkManagement_IpHelper", "Win32_Foundation", "Win32_System_Com"] }
@@ -36,5 +47,6 @@ name = "network_guardian"
 path = "src/main.rs"
 
 [features]
+default = []
 # Enable packet capture (requires Npcap on Windows or libpcap-dev on Linux)
 packet-capture = ["pcap"]
