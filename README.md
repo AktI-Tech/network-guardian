@@ -38,10 +38,14 @@ cargo run --release
 ```bash
 network_guardian serve --bind 127.0.0.1:8787 --interval 2
 network_guardian connections          # one-shot process → dest table
+network_guardian mcp                  # MCP stdio server for IDE agents
 network_guardian stats
 network_guardian recent 20
 network_guardian monitor              # packet path (optional feature)
 network_guardian help
+
+# Optional Suricata hybrid ingest
+network_guardian serve --eve C:\path\to\eve.json
 ```
 
 Packet capture (optional):
@@ -52,39 +56,58 @@ cargo build --release --features packet-capture
 cargo run --release --features packet-capture -- monitor
 ```
 
+### MCP (IDE agents)
+
+```json
+{
+  "mcpServers": {
+    "network-guardian": {
+      "command": "network_guardian",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Tools (read-only): `security_summary`, `list_active_connections`, `list_alerts`, `destination_category`.
+
 ## What works today
 
 - **Process ↔ socket sampling** (active TCP only — filters TIME_WAIT noise)
 - **Destination categories**: `llm`, `registry`, `cloud`, `lan`, `localhost`, `unknown`
+- **AI client process boost** (e.g. `grok.exe` → llm even on CDN IPs)
 - **Reverse DNS** (cached) so CDN IPs can map to known hosts / labels
 - **Stack hints**: `wsl`, `docker`, `llm-local` from process names + env probe
+- **YAML rules** (`rules/default.yml`) + embedded defaults
+- **MCP stdio server** for coding agents
+- **SSE** live ticks (`/api/events`) + dashboard
+- **Suricata EVE** optional ingest (`--eve`)
 - **SQLite** store: connections, destinations, processes, alerts
-- **Rule MVP**: first-seen unknown destinations; suspicious ports
-- **Local web dashboard** (embedded static UI) with WSL/Docker pills
-- **CLI** for stats / export / cleanup
+- **Local web dashboard** with WSL/Docker pills
 - Optional **Npcap** packet path with corrected Ethernet/IP parse
 
 ## Roadmap (short)
 
 | Phase | Focus |
 |-------|--------|
-| Now | Local working model on your PC |
-| Next | WSL/Docker visibility, richer rules, optional Suricata EVE ingest |
-| Later | **MCP plugin / IDE extensions**, mobile companion (Google Play), Microsoft new-device / ARM64 clients |
-
-Deep design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
+| Now | Local dashboard + rules + MCP |
+| Next | Deeper WSL/Docker, richer rule language |
+| Later | Mobile companion, Microsoft new-device / ARM64 clients |
 
 ## Project layout
 
 ```text
 src/
   main.rs              CLI entry (serve is default)
+  mcp.rs               MCP stdio server
   sensors/             Host connection sampler
   destinations.rs      LLM / registry / cloud catalog
-  rules.rs             First-seen + port policy
-  api.rs               Loopback HTTP API
+  rules.rs             YAML-backed policy engine
+  suricata.rs          Optional EVE JSON ingest
+  api.rs               Loopback HTTP API + SSE
   packet_capture.rs    Optional pcap path
   threat_database.rs   SQLite
+rules/default.yml      Default policy rules
 web/                   Dashboard assets (embedded at build)
 ```
 

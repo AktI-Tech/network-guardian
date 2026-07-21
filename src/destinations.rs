@@ -306,17 +306,39 @@ pub fn classify_host(host: &str) -> ClassifiedDestination {
     }
 }
 
-/// Boost category using process context (e.g. ollama → LLM).
+/// Known AI / coding-agent client process name fragments → LLM labeling help.
+const AI_CLIENT_PROCESSES: &[(&str, &str)] = &[
+    ("grok", "Grok client"),
+    ("cursor", "Cursor"),
+    ("claude", "Claude client"),
+    ("chatgpt", "ChatGPT client"),
+    ("copilot", "Copilot"),
+    ("windsurf", "Windsurf"),
+    ("aide", "AI IDE"),
+    ("continue", "Continue.dev"),
+    ("aider", "Aider"),
+    ("codex", "Codex"),
+    ("gemini", "Gemini client"),
+    ("perplexity", "Perplexity"),
+    ("ollama", "Ollama"),
+    ("lmstudio", "LM Studio"),
+    ("lm studio", "LM Studio"),
+];
+
+/// Boost category using process context (local models + AI client apps).
 pub fn apply_process_boost(
     mut classified: ClassifiedDestination,
     process_name: Option<&str>,
     stack_hint: Option<&str>,
 ) -> ClassifiedDestination {
     let proc = process_name.unwrap_or("").to_ascii_lowercase();
+
+    // Local model runtimes
     if (stack_hint == Some("llm-local")
         || proc.contains("ollama")
         || proc.contains("lmstudio")
-        || proc.contains("llama"))
+        || proc.contains("llama")
+        || proc.contains("vllm"))
         && (classified.category == DestinationCategory::Localhost
             || classified.category == DestinationCategory::Lan
             || classified.category == DestinationCategory::Unknown)
@@ -325,7 +347,22 @@ pub fn apply_process_boost(
         if classified.label.is_none() {
             classified.label = Some("Local / process LLM".into());
         }
+        return classified;
     }
+
+    // Cloud AI clients often hit shared CDNs (Cloudflare) with no useful reverse DNS.
+    // When the *process* is a known agent/LLM client and destination is public unknown,
+    // tag as LLM so builders can filter "who is talking to model infra".
+    if classified.category == DestinationCategory::Unknown {
+        for (needle, label) in AI_CLIENT_PROCESSES {
+            if proc.contains(needle) {
+                classified.category = DestinationCategory::Llm;
+                classified.label = Some(format!("{label} (process)"));
+                break;
+            }
+        }
+    }
+
     classified
 }
 
@@ -401,6 +438,19 @@ mod tests {
         let base = classify_ip(IpAddr::V4(Ipv4Addr::LOCALHOST));
         let boosted = apply_process_boost(base, Some("ollama.exe"), Some("llm-local"));
         assert_eq!(boosted.category, DestinationCategory::Llm);
+    }
+
+    #[test]
+    fn process_boost_grok_client_public_unknown() {
+        let base = classify_ip_with_context(
+            IpAddr::V4(Ipv4Addr::new(104, 18, 28, 234)),
+            Some(443),
+            false,
+        );
+        assert_eq!(base.category, DestinationCategory::Unknown);
+        let boosted = apply_process_boost(base, Some("grok.exe"), None);
+        assert_eq!(boosted.category, DestinationCategory::Llm);
+        assert!(boosted.label.as_deref().unwrap_or("").contains("Grok"));
     }
 
     #[test]

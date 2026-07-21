@@ -7,12 +7,18 @@ use crate::models::AgentStatus;
 use crate::sensors::environment;
 use crate::threat_database::ThreatDatabase;
 use axum::extract::State;
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{Html, IntoResponse, Json};
 use axum::routing::get;
 use axum::Router;
+use futures::stream::Stream;
+use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::broadcast;
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt;
 
 const DASHBOARD_HTML: &str = include_str!("../web/index.html");
 const DASHBOARD_CSS: &str = include_str!("../web/style.css");
@@ -24,6 +30,7 @@ pub struct AppState {
     pub started: Instant,
     pub bind: String,
     pub sample_interval_secs: u64,
+    pub events: broadcast::Sender<String>,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -37,6 +44,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/destinations", get(api_destinations))
         .route("/api/stats", get(api_stats))
         .route("/api/environment", get(api_environment))
+        .route("/api/events", get(api_events))
         .with_state(state)
 }
 
@@ -48,6 +56,7 @@ pub async fn serve(
     let listener = tokio::net::TcpListener::bind(addr).await?;
     println!("🌐 Dashboard: http://{}/", addr);
     println!("   API:       http://{}/api/status", addr);
+    println!("   Events:    http://{}/api/events (SSE)", addr);
     axum::serve(listener, app).await?;
     Ok(())
 }
@@ -141,4 +150,16 @@ async fn api_stats(State(state): State<AppState>) -> impl IntoResponse {
         )
             .into_response(),
     }
+}
+
+/// Server-Sent Events stream: `{ "type": "tick"|"alert", ... }`
+async fn api_events(
+    State(state): State<AppState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let rx = state.events.subscribe();
+    let stream = BroadcastStream::new(rx).filter_map(|msg| match msg {
+        Ok(data) => Some(Ok(Event::default().data(data))),
+        Err(_) => None,
+    });
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }

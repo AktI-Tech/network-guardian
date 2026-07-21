@@ -172,5 +172,21 @@
   }
 
   refresh();
-  setInterval(refresh, 2000);
+  // Prefer SSE ticks when available; fall back to polling.
+  let pollTimer = setInterval(refresh, 5000);
+  try {
+    const es = new EventSource("/api/events");
+    es.onmessage = () => {
+      refresh();
+    };
+    es.onerror = () => {
+      /* keep poll timer as backup */
+    };
+    es.onopen = () => {
+      clearInterval(pollTimer);
+      pollTimer = setInterval(refresh, 15000);
+    };
+  } catch (_) {
+    /* EventSource unavailable — polling only */
+  }
 })();
