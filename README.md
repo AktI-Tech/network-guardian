@@ -37,6 +37,9 @@ cargo run --release
 
 ```bash
 network_guardian serve --bind 127.0.0.1:8787 --interval 2
+network_guardian serve --tray         # Windows: system tray (Open Dashboard / Quit)
+network_guardian autostart enable     # Windows: start at logon (serve --tray)
+network_guardian autostart status
 network_guardian connections          # one-shot process → dest table
 network_guardian stack                # WSL distros, Docker containers, adapters
 network_guardian rules                # show YAML policy (allow/watch/fan-out)
@@ -85,6 +88,7 @@ Tools (read-only): `security_summary`, `list_active_connections`, `list_alerts`,
 - **Builder stack panel**: WSL distro list, Docker containers/ports, tagged adapters
 - **YAML rules** (`rules/default.yml`): first-seen, allow/watch lists, high fan-out, ports
 - **Regional radar** (Nepal / South Asia sample pack): industry heat, campaigns, local IoC exposure
+- **Windows tray + autostart**: `serve --tray`, `autostart enable|disable|status` (HKCU Run)
 - **MCP stdio server** for coding agents
 - **SSE** live ticks (`/api/events`) + dashboard
 - **Suricata EVE** optional ingest (`--eve`)
