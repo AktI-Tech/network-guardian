@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NetworkGuardian — Protecting the builders</title>
+  <meta name="description" content="Local-first workstation security for Windows + WSL2 + Docker + LLMs. Process→destination map, dashboard, MCP tools, hybrid IDS." />
+  <meta property="og:title" content="NetworkGuardian" />
+  <meta property="og:description" content="Protecting the builders — local-first security for modern developer workstations." />
+  <meta property="og:url" content="https://akti-tech.github.io/network-guardian/" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="canonical" href="https://akti-tech.github.io/network-guardian/" />
+</head>
+<body>
+  <header class="hero">
+    <nav class="nav">
+      <a class="brand" href="./">🛡️ NetworkGuardian</a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#changelog">Changelog</a>
+        <a href="#get-started">Get started</a>
+        <a class="btn btn-sm" href="https://github.com/AktI-Tech/network-guardian" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </nav>
+    <div class="hero-body">
+      <p class="eyebrow">AktI-Tech · MIT · Local-first</p>
+      <h1>Protecting the builders</h1>
+      <p class="lead">
+        Workstation security for people who ship with <strong>Windows + WSL2 + Docker + local LLMs</strong>.
+        See <em>which process talks to which destination</em>, alert on policy, and plug into your IDE agents via MCP —
+        all on <code>127.0.0.1</code>, no cloud phone-home.
+      </p>
+      <div class="hero-actions">
+        <a class="btn primary" href="https://github.com/AktI-Tech/network-guardian#readme">Read the README</a>
+        <a class="btn" href="https://github.com/AktI-Tech/network-guardian">View source</a>
+      </div>
+      <div class="live-badges" id="live-badges">
+        <span class="pill">Loading live project data…</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="cards" id="stats">
+      <div class="card">
+        <div class="label">Version</div>
+        <div class="value" id="stat-version">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Stars</div>
+        <div class="value" id="stat-stars">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Open issues</div>
+        <div class="value" id="stat-issues">—</div>
+      </div>
+      <div class="card">
+        <div class="label">Last push</div>
+        <div class="value small" id="stat-push">—</div>
+      </div>
+    </section>
+
+    <section id="what">
+      <h2>What it is</h2>
+      <p>
+        <strong>NetworkGuardian</strong> is a personal / builder-focused security monitor written in Rust.
+        It is not a cloud EDR and not a full Snort replacement. It is a <strong>local dashboard + agent</strong>
+        that answers: <em>right now, who on this machine is talking outbound, and does that look expected?</em>
+      </p>
+      <ul class="checklist">
+        <li>Default command: local web dashboard + connection sampler on <code>http://127.0.0.1:8787/</code></li>
+        <li>Process → destination map (active TCP), destination categories (llm / registry / cloud / lan / …)</li>
+        <li>YAML policy rules, desktop alerts for high severity, SQLite history</li>
+        <li>MCP stdio server so coding agents can query posture without leaving the IDE</li>
+        <li>Optional Npcap packet path and optional Suricata EVE JSON ingest (hybrid IDS)</li>
+      </ul>
+    </section>
+
+    <section id="features">
+      <h2>Features (current)</h2>
+      <div class="feature-grid" id="feature-grid">
+        <!-- filled by site.js from FEATURES constant + live version badge -->
+      </div>
+    </section>
+
+    <section id="architecture">
+      <h2>Architecture</h2>
+      <pre class="diagram" aria-label="Architecture diagram">Browser (localhost)
+        │
+        ▼
+  ng-api  axum · 127.0.0.1 only · SSE /api/events
+        │
+        ▼
+  SQLite  connections · destinations · alerts
+        ▲
+        │
+  sampler  process↔socket + YAML rules + AI-client labels
+        ▲
+        │
+  optional  Npcap packets · Suricata eve.json</pre>
+      <p class="muted">
+        Privacy defaults: loopback bind only, local SQLite, no telemetry.
+        Future clients (MCP, mobile, Store UI) reuse the same local API.
+      </p>
+    </section>
+
+    <section id="get-started">
+      <h2>Get started</h2>
+      <pre class="code"><code>git clone https://github.com/AktI-Tech/network-guardian.git
+cd network-guardian
+cargo build --release
+cargo run --release
+# → open http://127.0.0.1:8787/
+
+cargo run --release -- connections   # one-shot process → dest
+cargo run --release -- mcp           # MCP stdio for IDE agents
+cargo run --release -- serve --eve path/to/eve.json  # Suricata hybrid</code></pre>
+      <p>
+        Requirements: Rust stable, Windows 10/11 (primary) or Linux.
+        Optional packet capture: Npcap + Admin, build with <code>--features packet-capture</code>.
+      </p>
+    </section>
+
+    <section id="mcp">
+      <h2>MCP for builders</h2>
+      <p>Point your IDE / agent at the binary:</p>
+      <pre class="code"><code>{
+  "mcpServers": {
+    "network-guardian": {
+      "command": "network_guardian",
+      "args": ["mcp"]
+    }
+  }
+}</code></pre>
+      <p class="muted">Read-only tools: <code>security_summary</code>, <code>list_active_connections</code>, <code>list_alerts</code>, <code>destination_category</code>.</p>
+    </section>
+
+    <section id="changelog">
+      <h2>Live changelog</h2>
+      <p class="muted">Pulled from GitHub commits and releases on this page load — stays current as the repo moves.</p>
+      <div class="tabs">
+        <button class="tab active" data-panel="commits">Recent commits</button>
+        <button class="tab" data-panel="releases">Releases</button>
+      </div>
+      <div id="panel-commits" class="panel active">
+        <ul class="timeline" id="commit-list">
+          <li class="muted">Loading commits…</li>
+        </ul>
+      </div>
+      <div id="panel-releases" class="panel">
+        <ul class="timeline" id="release-list">
+          <li class="muted">Loading releases…</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="roadmap">
+      <h2>Roadmap</h2>
+      <ol class="roadmap">
+        <li><strong>Done</strong> — Local dashboard, process→destination, rules, MCP, Suricata EVE hook (v0.3)</li>
+        <li><strong>Next</strong> — Deeper WSL/Docker visibility, richer YAML rules, tray / autostart</li>
+        <li><strong>Later</strong> — Mobile companion (Google Play), Microsoft new-device / ARM64 clients, Store UI companion</li>
+      </ol>
+    </section>
+  </main>
+
+  <footer>
+    <div>
+      <strong>NetworkGuardian</strong> · Protecting the builders<br />
+      <span class="muted">Maintained by <a href="https://github.com/AktI-Tech">AktI-Tech</a> · MIT License</span>
+    </div>
+    <div class="footer-meta" id="footer-meta"></div>
+  </footer>
+
+  <script src="site.js"></script>
+</body>
+</html>
