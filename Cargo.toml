@@ -1,6 +1,6 @@
 [package]
 name = "network-guardian"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 description = "Local-first workstation security monitor — protecting the builders"
 license = "MIT"
@@ -42,7 +42,14 @@ serde_yaml = "0.9"
 tokio-stream = { version = "0.1", features = ["sync"] }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.52", features = ["Win32_NetworkManagement_IpHelper", "Win32_Foundation", "Win32_System_Com"] }
+windows = { version = "0.52", features = [
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_UI_WindowsAndMessaging",
+] }
+tray-icon = "0.19"
+winreg = "0.52"
 
 [[bin]]
 name = "network_guardian"

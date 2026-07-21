@@ -1,6 +1,8 @@
 #![allow(dead_code)] // stubs (daemon/ui) and future detectors kept intentionally
 
 mod api;
+#[cfg(windows)]
+mod autostart;
 mod daemon;
 mod destinations;
 mod mcp;
@@ -14,6 +16,8 @@ mod sensors;
 mod suricata;
 mod threat_database;
 mod threat_detection;
+#[cfg(windows)]
+mod tray;
 mod ui;
 mod utils;
 
@@ -45,18 +49,28 @@ enum Command {
         bind: String,
         sample_secs: u64,
         eve: Option<PathBuf>,
+        tray: bool,
     },
     Mcp,
     Connections,
     Stack,
     Rules,
     Region,
+    Autostart {
+        action: AutostartAction,
+    },
     Stats,
     Recent(u32),
     Severity(String),
     ExportJson(String, u32),
     Cleanup(i32),
     Help,
+}
+
+enum AutostartAction {
+    Enable,
+    Disable,
+    Status,
 }
 
 #[tokio::main]
@@ -91,7 +105,8 @@ async fn main() {
             bind,
             sample_secs,
             eve,
-        } => run_serve(db, bind, sample_secs, eve).await,
+            tray,
+        } => run_serve(db, bind, sample_secs, eve, tray).await,
         Command::Mcp => {
             if let Err(e) = mcp::run(db) {
                 eprintln!("❌ MCP server error: {}", e);
@@ -102,6 +117,7 @@ async fn main() {
         Command::Stack => print_stack(),
         Command::Rules => print_rules(),
         Command::Region => print_region(Some(&db)),
+        Command::Autostart { action } => run_autostart(action),
         Command::Stats => print_stats(&db),
         Command::Recent(limit) => print_recent(&db, limit),
         Command::Severity(level) => print_by_severity(&db, &level),
@@ -117,6 +133,7 @@ fn parse_command(args: Vec<String>) -> Result<Command, String> {
             bind: DEFAULT_BIND.to_string(),
             sample_secs: DEFAULT_SAMPLE_SECS,
             eve: None,
+            tray: false,
         });
     }
 
@@ -126,10 +143,28 @@ fn parse_command(args: Vec<String>) -> Result<Command, String> {
         "stack" => Ok(Command::Stack),
         "rules" => Ok(Command::Rules),
         "region" => Ok(Command::Region),
+        "autostart" => {
+            let action = args.get(1).map(|s| s.as_str()).unwrap_or("status");
+            match action {
+                "enable" | "on" => Ok(Command::Autostart {
+                    action: AutostartAction::Enable,
+                }),
+                "disable" | "off" => Ok(Command::Autostart {
+                    action: AutostartAction::Disable,
+                }),
+                "status" => Ok(Command::Autostart {
+                    action: AutostartAction::Status,
+                }),
+                other => Err(format!(
+                    "unknown autostart action '{other}' (use enable|disable|status)"
+                )),
+            }
+        }
         "serve" => {
             let mut bind = DEFAULT_BIND.to_string();
             let mut sample_secs = DEFAULT_SAMPLE_SECS;
             let mut eve = None;
+            let mut tray = false;
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
@@ -156,6 +191,9 @@ fn parse_command(args: Vec<String>) -> Result<Command, String> {
                             .ok_or_else(|| "--eve requires path to eve.json".to_string())?;
                         eve = Some(PathBuf::from(p));
                     }
+                    "--tray" => {
+                        tray = true;
+                    }
                     other => return Err(format!("unknown serve option '{}'", other)),
                 }
                 i += 1;
@@ -164,6 +202,7 @@ fn parse_command(args: Vec<String>) -> Result<Command, String> {
                 bind,
                 sample_secs,
                 eve,
+                tray,
             })
         }
         "connections" => Ok(Command::Connections),
@@ -225,7 +264,13 @@ fn normalize_severity(value: &str) -> Result<String, String> {
     }
 }
 
-async fn run_serve(db: Arc<ThreatDatabase>, bind: String, sample_secs: u64, eve: Option<PathBuf>) {
+async fn run_serve(
+    db: Arc<ThreatDatabase>,
+    bind: String,
+    sample_secs: u64,
+    eve: Option<PathBuf>,
+    tray: bool,
+) {
     println!("🛡️  NetworkGuardian");
     println!("   Protecting the builders\n");
     println!("✅ Database: {}", DB_PATH);
@@ -289,29 +334,132 @@ async fn run_serve(db: Arc<ThreatDatabase>, bind: String, sample_secs: u64, eve:
         None
     };
 
+    let dashboard_url = format!("http://{}/", addr);
+    #[cfg(windows)]
+    let tray_rx = if tray {
+        Some(tray::spawn(dashboard_url.clone()))
+    } else {
+        None
+    };
+    #[cfg(not(windows))]
+    let _tray_rx = if tray {
+        eprintln!("⚠️  --tray is only supported on Windows; continuing without tray");
+        None::<()>
+    } else {
+        None
+    };
+
     let server = api::serve(state, addr);
 
-    tokio::select! {
-        result = server => {
-            if let Err(e) = result {
-                eprintln!("❌ Server error: {}", e);
+    #[cfg(windows)]
+    {
+        tokio::select! {
+            result = server => {
+                if let Err(e) = result {
+                    eprintln!("❌ Server error: {}", e);
+                }
+            }
+            _ = sampler => {
+                eprintln!("Sampler task ended unexpectedly");
+            }
+            _ = async {
+                if let Some(h) = eve_handle {
+                    let _ = h.await;
+                } else {
+                    std::future::pending::<()>().await;
+                }
+            } => {
+                eprintln!("EVE ingest task ended");
+            }
+            _ = async {
+                if let Some(rx) = tray_rx {
+                    loop {
+                        match rx.try_recv() {
+                            Ok(tray::TrayCommand::Quit) => break,
+                            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                                tokio::time::sleep(Duration::from_millis(200)).await;
+                            }
+                            Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
+                        }
+                    }
+                } else {
+                    std::future::pending::<()>().await;
+                }
+            } => {
+                println!("\nTray quit — shutting down…");
+            }
+            _ = tokio::signal::ctrl_c() => {
+                println!("\nShutting down…");
             }
         }
-        _ = sampler => {
-            eprintln!("Sampler task ended unexpectedly");
-        }
-        _ = async {
-            if let Some(h) = eve_handle {
-                let _ = h.await;
-            } else {
-                std::future::pending::<()>().await;
+    }
+    #[cfg(not(windows))]
+    {
+        tokio::select! {
+            result = server => {
+                if let Err(e) = result {
+                    eprintln!("❌ Server error: {}", e);
+                }
             }
-        } => {
-            eprintln!("EVE ingest task ended");
+            _ = sampler => {
+                eprintln!("Sampler task ended unexpectedly");
+            }
+            _ = async {
+                if let Some(h) = eve_handle {
+                    let _ = h.await;
+                } else {
+                    std::future::pending::<()>().await;
+                }
+            } => {
+                eprintln!("EVE ingest task ended");
+            }
+            _ = tokio::signal::ctrl_c() => {
+                println!("\nShutting down…");
+            }
         }
-        _ = tokio::signal::ctrl_c() => {
-            println!("\nShutting down…");
+    }
+}
+
+fn run_autostart(action: AutostartAction) {
+    #[cfg(windows)]
+    {
+        match action {
+            AutostartAction::Enable => match autostart::enable() {
+                Ok(cmd) => {
+                    println!("✅ Autostart enabled (HKCU Run)");
+                    println!("   {cmd}");
+                    println!("   Signs in with: serve --tray");
+                }
+                Err(e) => {
+                    eprintln!("❌ Failed to enable autostart: {e}");
+                    process::exit(1);
+                }
+            },
+            AutostartAction::Disable => match autostart::disable() {
+                Ok(()) => println!("✅ Autostart disabled"),
+                Err(e) => {
+                    eprintln!("❌ Failed to disable autostart: {e}");
+                    process::exit(1);
+                }
+            },
+            AutostartAction::Status => match autostart::status() {
+                Ok(Some(cmd)) => {
+                    println!("Autostart: ON");
+                    println!("   {cmd}");
+                }
+                Ok(None) => println!("Autostart: OFF"),
+                Err(e) => {
+                    eprintln!("❌ Failed to read autostart: {e}");
+                    process::exit(1);
+                }
+            },
         }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = action;
+        eprintln!("autostart is only supported on Windows");
+        process::exit(1);
     }
 }
 
@@ -792,8 +940,10 @@ fn print_usage() {
     println!("NetworkGuardian — Protecting the builders");
     println!();
     println!("Commands:");
-    println!("  serve [--bind 127.0.0.1:8787] [--interval 2] [--eve path/to/eve.json]");
-    println!("                              Start dashboard + connection sampler (default)");
+    println!("  serve [--bind 127.0.0.1:8787] [--interval 2] [--eve path] [--tray]");
+    println!("                              Start dashboard + sampler (default); --tray = system tray (Windows)");
+    println!("  autostart enable|disable|status");
+    println!("                              Windows logon autostart (HKCU Run → serve --tray)");
     println!("  mcp                         MCP stdio server (read-only tools for IDE agents)");
     println!("  connections                 One-shot process → destination table");
     println!("  stack                       WSL distros, Docker containers, adapter tags");
