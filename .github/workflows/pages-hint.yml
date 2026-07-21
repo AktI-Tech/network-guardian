@@ -1,0 +1,37 @@
+# GitHub Pages is configured as: branch main, folder /docs (legacy project pages).
+# This workflow does not deploy artifacts; it fails the PR/push if the public site
+# files are missing so the landing page stays shippable as the product evolves.
+
+name: Pages site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "Cargo.toml"
+      - ".github/workflows/pages-hint.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**"
+
+jobs:
+  verify-docs-site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Require Pages entrypoints
+        run: |
+          set -euo pipefail
+          test -f docs/index.html
+          test -f docs/styles.css
+          test -f docs/site.js
+          # Basic content sanity — motto + live data hook
+          grep -q "Protecting the builders" docs/index.html
+          grep -q "api.github.com/repos/AktI-Tech/network-guardian" docs/site.js
+          echo "GitHub Pages source OK (main /docs)"
