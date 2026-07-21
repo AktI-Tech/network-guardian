@@ -41,7 +41,7 @@ network_guardian serve --tray         # Windows: system tray (Open Dashboard / Q
 network_guardian autostart enable     # Windows: start at logon (serve --tray)
 network_guardian autostart status
 network_guardian connections          # one-shot process → dest table
-network_guardian stack                # WSL distros, Docker containers, adapters
+network_guardian stack                # WSL + Docker (containers, networks, host-port exposure)
 network_guardian rules                # show YAML policy (allow/watch/fan-out)
 network_guardian region               # Nepal/South Asia radar + local IoC exposure
 network_guardian mcp                  # MCP stdio server for IDE agents
@@ -82,10 +82,10 @@ Tools (read-only): `security_summary`, `list_active_connections`, `list_alerts`,
 - **Process ↔ socket sampling** (active TCP only — filters TIME_WAIT noise)
 - **Destination categories**: `llm`, `registry`, `cloud`, `lan`, `localhost`, `unknown`
 - **AI client process boost** (e.g. `grok.exe` → llm even on CDN IPs)
-- **Builder stack**: WSL distro list (`wsl -l -v`), Docker containers/ports, tagged adapters
+- **Builder stack**: WSL distros, Docker containers/networks, tagged adapters
+- **Docker host-port exposure**: parse published ports (`0.0.0.0` / LAN / localhost), compose project labels, engine version
 - **Reverse DNS** (cached) so CDN IPs can map to known hosts / labels
 - **Stack hints**: `wsl`, `docker`, `llm-local` from process names + env probe
-- **Builder stack panel**: WSL distro list, Docker containers/ports, tagged adapters
 - **YAML rules** (`rules/default.yml`): first-seen, allow/watch lists, high fan-out, ports
 - **Regional radar** (Nepal / South Asia sample pack): industry heat, campaigns, local IoC exposure
 - **Windows tray + autostart**: `serve --tray`, `autostart enable|disable|status` (HKCU Run)
@@ -100,8 +100,8 @@ Tools (read-only): `security_summary`, `list_active_connections`, `list_alerts`,
 
 | Phase | Focus |
 |-------|--------|
-| Now | Local dashboard + rules + MCP |
-| Next | Deeper WSL/Docker, richer rule language |
+| Now | Local dashboard + rules + MCP + Docker exposure |
+| Next | Live regional feeds, richer rule language |
 | Later | Mobile companion, Microsoft new-device / ARM64 clients |
 
 ## Project layout

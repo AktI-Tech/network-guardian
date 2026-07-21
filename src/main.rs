@@ -633,6 +633,19 @@ fn print_stack() {
         "   WSL: {}    Docker: {} (engine ok: {})",
         env.wsl_detected, env.docker_detected, env.docker_engine_ok
     );
+    if let Some(ref v) = env.docker_version {
+        print!("   Engine: {v}");
+        if let Some(ref ctx) = env.docker_context {
+            print!("  context={ctx}");
+        }
+        println!();
+    }
+    if env.docker_engine_ok {
+        println!(
+            "   Containers: {} running / {} stopped",
+            env.docker_running, env.docker_stopped
+        );
+    }
     if !env.notes.is_empty() {
         println!("\nNotes:");
         for n in &env.notes {
@@ -646,22 +659,63 @@ fn print_stack() {
             println!("  {} {:<24} {:<12} v{}", def, d.name, d.state, d.version);
         }
     }
+    if !env.docker_host_exposure.is_empty() {
+        println!("\n⚠️  Host port exposure (beyond loopback):");
+        for e in &env.docker_host_exposure {
+            let proj = e
+                .compose_project
+                .as_deref()
+                .map(|p| format!("  compose={p}"))
+                .unwrap_or_default();
+            println!(
+                "  [{:<14}] {:>15}:{:<6} → container {}/{}  ({}){}",
+                truncate(&e.container, 14),
+                e.host_ip,
+                e.host_port,
+                e.container_port,
+                e.protocol,
+                e.exposure,
+                proj
+            );
+        }
+    }
     if !env.docker_containers.is_empty() {
         println!("\nDocker containers:");
         for c in &env.docker_containers {
+            let proj = c
+                .compose_project
+                .as_deref()
+                .map(|p| format!("  [{p}]"))
+                .unwrap_or_default();
             println!(
-                "  {:<14} {:<20} {:<28} {}",
+                "  {:<14} {:<20} {:<28} {}{}",
                 truncate(&c.id, 12),
                 truncate(&c.name, 20),
                 truncate(&c.image, 28),
-                c.status
+                c.status,
+                proj
             );
             if !c.ports.is_empty() {
-                println!("               ports: {}", c.ports);
+                println!(
+                    "               ports: {}  (exposure: {})",
+                    c.ports, c.max_exposure
+                );
             }
         }
     } else if env.docker_detected {
         println!("\nDocker containers: (none listed)");
+    }
+    if !env.docker_networks.is_empty() {
+        println!("\nDocker networks:");
+        for n in &env.docker_networks {
+            println!(
+                "  {:<14} {:<24} driver={:<10} scope={}",
+                truncate(&n.id, 12),
+                truncate(&n.name, 24),
+                n.driver,
+                n.scope
+            );
+        }
     }
     if !env.interfaces.is_empty() {
         println!("\nNetwork adapters (tagged):");

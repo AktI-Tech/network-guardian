@@ -77,14 +77,34 @@
         </div>
         <div class="stack-block">
           <h3>Docker containers <span class="muted" id="docker-count"></span></h3>
+          <p class="stack-notes" id="docker-meta"></p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Name</th><th>Image</th><th>Status</th><th>Ports</th></tr></thead>
+              <thead><tr><th>Name</th><th>Image</th><th>Status</th><th>Ports / exposure</th><th>Compose</th></tr></thead>
               <tbody id="docker-body"></tbody>
             </table>
           </div>
         </div>
         <div class="stack-block full">
+          <h3>Host port exposure <span class="muted" id="exposure-count"></span></h3>
+          <p class="stack-notes">Published ports bound beyond loopback (0.0.0.0 / LAN IP) — easy to forget on a builder box.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Container</th><th>Host</th><th>→ Container</th><th>Exposure</th><th>Compose</th></tr></thead>
+              <tbody id="exposure-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="stack-block">
+          <h3>Docker networks <span class="muted" id="net-count"></span></h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Driver</th><th>Scope</th></tr></thead>
+              <tbody id="docker-net-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="stack-block">
           <h3>Tagged adapters</h3>
           <div class="table-wrap">
             <table>
@@ -92,6 +112,8 @@
               <tbody id="iface-body"></tbody>
             </table>
           </div>
+        </div>
+        <div class="stack-block full">
           <p class="stack-notes" id="stack-notes"></p>
         </div>
       </div>

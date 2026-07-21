@@ -116,12 +116,52 @@ pub struct WslDistro {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerPublishedPort {
+    /// Original fragment from `docker ps` Ports column.
+    pub raw: String,
+    pub host_ip: Option<String>,
+    pub host_port: Option<String>,
+    pub container_port: Option<String>,
+    pub protocol: Option<String>,
+    /// localhost | lan | all-interfaces | unpublished
+    pub exposure: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DockerContainer {
     pub id: String,
     pub name: String,
     pub image: String,
     pub status: String,
     pub ports: String,
+    pub running: bool,
+    /// `com.docker.compose.project` when present.
+    pub compose_project: Option<String>,
+    pub published: Vec<DockerPublishedPort>,
+    /// Worst exposure among published ports (localhost < lan < all-interfaces).
+    pub max_exposure: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerNetwork {
+    pub id: String,
+    pub name: String,
+    pub driver: String,
+    pub scope: String,
+}
+
+/// Host-published mapping that is not loopback-only (security-relevant).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerHostExposure {
+    pub container: String,
+    pub image: String,
+    pub host_ip: String,
+    pub host_port: String,
+    pub container_port: String,
+    pub protocol: String,
+    /// lan | all-interfaces
+    pub exposure: String,
+    pub compose_project: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,8 +177,16 @@ pub struct BuilderEnvironment {
     pub wsl_detected: bool,
     pub docker_detected: bool,
     pub docker_engine_ok: bool,
+    /// Docker Engine server version when reachable.
+    pub docker_version: Option<String>,
+    pub docker_context: Option<String>,
+    pub docker_running: usize,
+    pub docker_stopped: usize,
     pub wsl_distros: Vec<WslDistro>,
     pub docker_containers: Vec<DockerContainer>,
+    pub docker_networks: Vec<DockerNetwork>,
+    /// Non-loopback host port publishes (builders often forget these).
+    pub docker_host_exposure: Vec<DockerHostExposure>,
     pub interfaces: Vec<StackInterface>,
     pub notes: Vec<String>,
     pub probed_at: String,
