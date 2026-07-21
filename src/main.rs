@@ -3,12 +3,14 @@
 mod api;
 mod daemon;
 mod destinations;
+mod mcp;
 mod models;
 mod network_monitor;
 mod notifications;
 mod packet_capture;
 mod rules;
 mod sensors;
+mod suricata;
 mod threat_database;
 mod threat_detection;
 mod ui;
@@ -16,6 +18,7 @@ mod utils;
 
 use std::env;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::process;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -24,9 +27,10 @@ use crate::api::AppState;
 use crate::models::ThreatAlert;
 use crate::rules::RuleEngine;
 use crate::sensors::connections;
+use crate::suricata::EveTail;
 use crate::threat_database::{ThreatDatabase, ThreatRecord};
 use crate::threat_detection::ThreatDetector;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 
 const DB_PATH: &str = "threats.db";
 const DEFAULT_RECENT_LIMIT: u32 = 10;
@@ -36,7 +40,12 @@ const DEFAULT_SAMPLE_SECS: u64 = 2;
 
 enum Command {
     Monitor,
-    Serve { bind: String, sample_secs: u64 },
+    Serve {
+        bind: String,
+        sample_secs: u64,
+        eve: Option<PathBuf>,
+    },
+    Mcp,
     Connections,
     Stats,
     Recent(u32),
@@ -74,7 +83,17 @@ async fn main() {
 
     match command {
         Command::Monitor => run_monitor(db).await,
-        Command::Serve { bind, sample_secs } => run_serve(db, bind, sample_secs).await,
+        Command::Serve {
+            bind,
+            sample_secs,
+            eve,
+        } => run_serve(db, bind, sample_secs, eve).await,
+        Command::Mcp => {
+            if let Err(e) = mcp::run(db) {
+                eprintln!("❌ MCP server error: {}", e);
+                process::exit(1);
+            }
+        }
         Command::Connections => print_connections_once(),
         Command::Stats => print_stats(&db),
         Command::Recent(limit) => print_recent(&db, limit),
@@ -90,14 +109,17 @@ fn parse_command(args: Vec<String>) -> Result<Command, String> {
         return Ok(Command::Serve {
             bind: DEFAULT_BIND.to_string(),
             sample_secs: DEFAULT_SAMPLE_SECS,
+            eve: None,
         });
     }
 
     match args[0].as_str() {
         "monitor" => Ok(Command::Monitor),
+        "mcp" => Ok(Command::Mcp),
         "serve" => {
             let mut bind = DEFAULT_BIND.to_string();
             let mut sample_secs = DEFAULT_SAMPLE_SECS;
+            let mut eve = None;
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
@@ -116,11 +138,23 @@ fn parse_command(args: Vec<String>) -> Result<Command, String> {
                             .parse()
                             .map_err(|_| "invalid --interval".to_string())?;
                     }
+                    "--eve" => {
+                        i += 1;
+                        let p = args
+                            .get(i)
+                            .cloned()
+                            .ok_or_else(|| "--eve requires path to eve.json".to_string())?;
+                        eve = Some(PathBuf::from(p));
+                    }
                     other => return Err(format!("unknown serve option '{}'", other)),
                 }
                 i += 1;
             }
-            Ok(Command::Serve { bind, sample_secs })
+            Ok(Command::Serve {
+                bind,
+                sample_secs,
+                eve,
+            })
         }
         "connections" => Ok(Command::Connections),
         "stats" => Ok(Command::Stats),
@@ -181,10 +215,18 @@ fn normalize_severity(value: &str) -> Result<String, String> {
     }
 }
 
-async fn run_serve(db: Arc<ThreatDatabase>, bind: String, sample_secs: u64) {
+async fn run_serve(db: Arc<ThreatDatabase>, bind: String, sample_secs: u64, eve: Option<PathBuf>) {
     println!("🛡️  NetworkGuardian");
     println!("   Protecting the builders\n");
     println!("✅ Database: {}", DB_PATH);
+
+    let engine = RuleEngine::new();
+    println!(
+        "📜 Rules: first_seen_unknown={} llm_traffic={} suspicious_ports={}",
+        engine.config().settings.alert_first_seen_unknown,
+        engine.config().settings.alert_llm_traffic,
+        engine.config().suspicious_ports.len()
+    );
 
     let env = crate::sensors::environment::probe();
     if env.wsl_detected {
@@ -210,18 +252,32 @@ async fn run_serve(db: Arc<ThreatDatabase>, bind: String, sample_secs: u64) {
 
     // Clamp once so dashboard status matches actual sampler cadence.
     let sample_secs = sample_secs.max(1);
+    let (event_tx, _) = broadcast::channel::<String>(128);
 
     let state = AppState {
         db: Arc::clone(&db),
         started: Instant::now(),
         bind: addr.to_string(),
         sample_interval_secs: sample_secs,
+        events: event_tx.clone(),
     };
 
     let sampler_db = Arc::clone(&db);
+    let sampler_tx = event_tx.clone();
     let sampler = tokio::spawn(async move {
-        run_connection_sampler(sampler_db, sample_secs).await;
+        run_connection_sampler(sampler_db, sample_secs, sampler_tx, None).await;
     });
+
+    let eve_handle = if let Some(path) = eve {
+        println!("🦈 Suricata EVE: {}", path.display());
+        let eve_db = Arc::clone(&db);
+        let eve_tx = event_tx.clone();
+        Some(tokio::spawn(async move {
+            run_eve_ingest(eve_db, path, eve_tx).await;
+        }))
+    } else {
+        None
+    };
 
     let server = api::serve(state, addr);
 
@@ -234,15 +290,28 @@ async fn run_serve(db: Arc<ThreatDatabase>, bind: String, sample_secs: u64) {
         _ = sampler => {
             eprintln!("Sampler task ended unexpectedly");
         }
+        _ = async {
+            if let Some(h) = eve_handle {
+                let _ = h.await;
+            } else {
+                std::future::pending::<()>().await;
+            }
+        } => {
+            eprintln!("EVE ingest task ended");
+        }
         _ = tokio::signal::ctrl_c() => {
             println!("\nShutting down…");
         }
     }
 }
 
-async fn run_connection_sampler(db: Arc<ThreatDatabase>, sample_secs: u64) {
+async fn run_connection_sampler(
+    db: Arc<ThreatDatabase>,
+    sample_secs: u64,
+    events: broadcast::Sender<String>,
+    _unused: Option<()>,
+) {
     let mut engine = RuleEngine::new();
-    // Caller must pass an already-clamped interval (>= 1).
     let interval = Duration::from_secs(sample_secs.max(1));
     println!(
         "🔍 Connection sampler every {}s (process → destination)\n",
@@ -258,9 +327,54 @@ async fn run_connection_sampler(db: Arc<ThreatDatabase>, sample_secs: u64) {
                 let alerts = engine.evaluate(&samples);
                 for alert in alerts {
                     handle_threat(&db, &alert);
+                    let _ = events.send(
+                        serde_json::json!({
+                            "type": "alert",
+                            "description": alert.description,
+                            "severity": format!("{:?}", alert.severity),
+                        })
+                        .to_string(),
+                    );
                 }
+                let _ = events.send(
+                    serde_json::json!({
+                        "type": "tick",
+                        "connections": samples.len(),
+                    })
+                    .to_string(),
+                );
             }
             Err(e) => eprintln!("❌ Connection sample failed: {}", e),
+        }
+        tokio::time::sleep(interval).await;
+    }
+}
+
+async fn run_eve_ingest(db: Arc<ThreatDatabase>, path: PathBuf, events: broadcast::Sender<String>) {
+    let mut tail = EveTail::new(path);
+    let interval = Duration::from_secs(2);
+    loop {
+        match tail.poll_new_alerts() {
+            Ok(alerts) => {
+                for alert in alerts {
+                    handle_threat(&db, &alert);
+                    let _ = events.send(
+                        serde_json::json!({
+                            "type": "alert",
+                            "source": "suricata",
+                            "description": alert.description,
+                            "severity": format!("{:?}", alert.severity),
+                        })
+                        .to_string(),
+                    );
+                }
+            }
+            Err(e) => {
+                // File may not exist yet — retry quietly every few cycles
+                eprintln!("EVE: {} ({})", e, tail.path().display());
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                continue;
+            }
         }
         tokio::time::sleep(interval).await;
     }
@@ -515,8 +629,9 @@ fn print_usage() {
     println!("NetworkGuardian — Protecting the builders");
     println!();
     println!("Commands:");
-    println!("  serve [--bind 127.0.0.1:8787] [--interval 2]");
+    println!("  serve [--bind 127.0.0.1:8787] [--interval 2] [--eve path/to/eve.json]");
     println!("                              Start dashboard + connection sampler (default)");
+    println!("  mcp                         MCP stdio server (read-only tools for IDE agents)");
     println!("  connections                 One-shot process → destination table");
     println!("  monitor                     Live packet monitor (needs --features packet-capture)");
     println!("  stats                       Show threat + connection summary");
@@ -527,6 +642,7 @@ fn print_usage() {
     println!("  help                        Show this help");
     println!();
     println!("Dashboard: http://127.0.0.1:8787/  (loopback only)");
+    println!("Rules:     rules/default.yml (or embedded defaults)");
 }
 
 #[cfg(test)]

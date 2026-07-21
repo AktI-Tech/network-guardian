@@ -35,3 +35,11 @@ __pycache__/
 *.pyo
 *.egg-info/
 .pytest_cache/
+
+# Documentation (local only — do not commit)
+*.md
+!README.md
+/docs/
+*.txt
+# Allow license as legal text, not docs
+!LICENSE

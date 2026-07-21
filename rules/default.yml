@@ -1,0 +1,17 @@
+# NetworkGuardian default policy rules (Protecting the builders)
+version: 1
+settings:
+  alert_first_seen_unknown: true
+  alert_llm_traffic: true
+suspicious_ports:
+  - 21
+  - 23
+  - 69
+  - 135
+  - 139
+  - 445
+  - 3389
+  - 4444
+  - 5555
+  - 6667
+  - 31337
