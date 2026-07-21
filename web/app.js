@@ -139,10 +139,25 @@
       : "";
   }
 
+  function exposureBadge(level) {
+    if (!level || level === "unpublished") return "";
+    const cls =
+      level === "all-interfaces"
+        ? "exp-all"
+        : level === "lan"
+          ? "exp-lan"
+          : level === "localhost"
+            ? "exp-local"
+            : "";
+    return `<span class="badge exposure ${cls}">${esc(level)}</span>`;
+  }
+
   function renderStack() {
     const env = stackEnv || {};
     const distros = env.wsl_distros || [];
     const containers = env.docker_containers || [];
+    const networks = env.docker_networks || [];
+    const exposure = env.docker_host_exposure || [];
     const ifaces = (env.interfaces || []).filter((i) => i.kind && i.kind !== "host");
 
     $("wsl-count").textContent = distros.length ? `(${distros.length})` : "";
@@ -153,6 +168,16 @@
           ? "(0)"
           : "(engine unreachable)"
         : "";
+
+    const metaBits = [];
+    if (env.docker_version) metaBits.push("Engine " + env.docker_version);
+    if (env.docker_context) metaBits.push("context " + env.docker_context);
+    if (env.docker_engine_ok) {
+      metaBits.push(
+        (env.docker_running || 0) + " running / " + (env.docker_stopped || 0) + " stopped"
+      );
+    }
+    $("docker-meta").textContent = metaBits.join(" · ");
 
     $("wsl-body").innerHTML = distros.length
       ? distros
@@ -174,16 +199,53 @@
         <td>${esc(c.name)}</td>
         <td title="${esc(c.image)}">${esc(truncate(c.image, 36))}</td>
         <td>${esc(c.status)}</td>
-        <td title="${esc(c.ports)}">${esc(truncate(c.ports || "—", 40))}</td>
+        <td title="${esc(c.ports)}">${esc(truncate(c.ports || "—", 36))} ${exposureBadge(c.max_exposure)}</td>
+        <td>${esc(c.compose_project || "—")}</td>
       </tr>`
           )
           .join("")
-      : `<tr><td colspan="4" class="muted">${
+      : `<tr><td colspan="5" class="muted">${
           env.docker_detected
             ? env.docker_engine_ok
               ? "No containers"
               : "Docker CLI/engine not responding"
             : "Docker not detected"
+        }</td></tr>`;
+
+    $("exposure-count").textContent = exposure.length ? `(${exposure.length})` : "";
+    $("exposure-body").innerHTML = exposure.length
+      ? exposure
+          .map(
+            (e) => `<tr>
+        <td>${esc(e.container)}</td>
+        <td><code>${esc(e.host_ip)}:${esc(e.host_port)}</code></td>
+        <td>${esc(e.container_port)}/${esc(e.protocol)}</td>
+        <td>${exposureBadge(e.exposure)}</td>
+        <td>${esc(e.compose_project || "—")}</td>
+      </tr>`
+          )
+          .join("")
+      : `<tr><td colspan="5" class="muted">${
+          env.docker_engine_ok
+            ? "No non-loopback host publishes — good"
+            : env.docker_detected
+              ? "Engine unreachable — cannot scan publishes"
+              : "Docker not detected"
+        }</td></tr>`;
+
+    $("net-count").textContent = networks.length ? `(${networks.length})` : "";
+    $("docker-net-body").innerHTML = networks.length
+      ? networks
+          .map(
+            (n) => `<tr>
+        <td>${esc(n.name)}</td>
+        <td>${esc(n.driver)}</td>
+        <td>${esc(n.scope)}</td>
+      </tr>`
+          )
+          .join("")
+      : `<tr><td colspan="3" class="muted">${
+          env.docker_engine_ok ? "No networks listed" : "—"
         }</td></tr>`;
 
     $("iface-body").innerHTML = ifaces.length

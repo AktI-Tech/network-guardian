@@ -1,6 +1,9 @@
-//! Builder stack probes: WSL distros, Docker containers, adapter tags.
+//! Builder stack probes: WSL distros, Docker containers/networks, host-port exposure, adapter tags.
 
-use crate::models::{BuilderEnvironment, DockerContainer, StackInterface, WslDistro};
+use crate::models::{
+    BuilderEnvironment, DockerContainer, DockerHostExposure, DockerNetwork, DockerPublishedPort,
+    StackInterface, WslDistro,
+};
 use chrono::Local;
 use parking_lot::Mutex;
 use std::path::Path;
@@ -42,7 +45,7 @@ pub fn probe() -> BuilderEnvironment {
     let mut wsl_distros = list_wsl_distros(&mut notes);
     let wsl_detected = !wsl_distros.is_empty() || detect_wsl_install(&mut notes);
 
-    let (docker_detected, docker_engine_ok, docker_containers) = probe_docker(&mut notes);
+    let docker = probe_docker(&mut notes);
     let interfaces = list_stack_interfaces();
 
     // If install found but distro list empty, keep detected true via install path.
@@ -65,16 +68,41 @@ pub fn probe() -> BuilderEnvironment {
         let _ = first;
     }
 
+    if !docker.host_exposure.is_empty() {
+        notes.push(format!(
+            "{} host-published port(s) beyond loopback (see Stack → Host exposure)",
+            docker.host_exposure.len()
+        ));
+    }
+
     BuilderEnvironment {
         wsl_detected,
-        docker_detected,
-        docker_engine_ok,
+        docker_detected: docker.detected,
+        docker_engine_ok: docker.engine_ok,
+        docker_version: docker.version,
+        docker_context: docker.context,
+        docker_running: docker.running,
+        docker_stopped: docker.stopped,
         wsl_distros,
-        docker_containers,
+        docker_containers: docker.containers,
+        docker_networks: docker.networks,
+        docker_host_exposure: docker.host_exposure,
         interfaces,
         notes,
         probed_at: Local::now().to_rfc3339(),
     }
+}
+
+struct DockerProbe {
+    detected: bool,
+    engine_ok: bool,
+    version: Option<String>,
+    context: Option<String>,
+    running: usize,
+    stopped: usize,
+    containers: Vec<DockerContainer>,
+    networks: Vec<DockerNetwork>,
+    host_exposure: Vec<DockerHostExposure>,
 }
 
 fn detect_wsl_install(notes: &mut Vec<String>) -> bool {
@@ -181,19 +209,291 @@ pub fn parse_wsl_list(text: &str) -> Vec<WslDistro> {
     out
 }
 
-fn probe_docker(notes: &mut Vec<String>) -> (bool, bool, Vec<DockerContainer>) {
+fn probe_docker(notes: &mut Vec<String>) -> DockerProbe {
     let install = detect_docker_install(notes);
     match list_docker_containers(notes) {
-        Ok(containers) => (true, true, containers),
+        Ok(containers) => {
+            let running = containers.iter().filter(|c| c.running).count();
+            let stopped = containers.len().saturating_sub(running);
+            let host_exposure = host_exposure_from_containers(&containers);
+            let networks = list_docker_networks().unwrap_or_default();
+            let version = docker_server_version(notes);
+            let context = docker_context_name(notes);
+            if let Some(ref v) = version {
+                notes.push(format!("Docker Engine {v}"));
+            }
+            if !networks.is_empty() {
+                notes.push(format!("{} docker network(s)", networks.len()));
+            }
+            notes.push(format!(
+                "{running} running / {stopped} stopped container(s)"
+            ));
+            DockerProbe {
+                detected: true,
+                engine_ok: true,
+                version,
+                context,
+                running,
+                stopped,
+                containers,
+                networks,
+                host_exposure,
+            }
+        }
         Err(e) => {
             if install {
                 notes.push(format!("Docker installed but engine query failed: {e}"));
-                (true, false, Vec::new())
+                DockerProbe {
+                    detected: true,
+                    engine_ok: false,
+                    version: None,
+                    context: None,
+                    running: 0,
+                    stopped: 0,
+                    containers: Vec::new(),
+                    networks: Vec::new(),
+                    host_exposure: Vec::new(),
+                }
             } else {
-                (false, false, Vec::new())
+                DockerProbe {
+                    detected: false,
+                    engine_ok: false,
+                    version: None,
+                    context: None,
+                    running: 0,
+                    stopped: 0,
+                    containers: Vec::new(),
+                    networks: Vec::new(),
+                    host_exposure: Vec::new(),
+                }
             }
         }
     }
+}
+
+fn docker_server_version(notes: &mut Vec<String>) -> Option<String> {
+    let output = match run_hidden("docker", &["version", "--format", "{{.Server.Version}}"]) {
+        Ok(o) => o,
+        Err(e) => {
+            notes.push(format!("docker version: {e}"));
+            return None;
+        }
+    };
+    if !output.status.success() {
+        return None;
+    }
+    let v = decode_command_output(&output.stdout).trim().to_string();
+    if v.is_empty() {
+        None
+    } else {
+        Some(v)
+    }
+}
+
+fn docker_context_name(notes: &mut Vec<String>) -> Option<String> {
+    let output = match run_hidden("docker", &["context", "show"]) {
+        Ok(o) => o,
+        Err(e) => {
+            notes.push(format!("docker context: {e}"));
+            return None;
+        }
+    };
+    if !output.status.success() {
+        return None;
+    }
+    let v = decode_command_output(&output.stdout).trim().to_string();
+    if v.is_empty() {
+        None
+    } else {
+        Some(v)
+    }
+}
+
+fn list_docker_networks() -> Result<Vec<DockerNetwork>, String> {
+    let output = run_hidden(
+        "docker",
+        &[
+            "network",
+            "ls",
+            "--format",
+            "{{.ID}}\t{{.Name}}\t{{.Driver}}\t{{.Scope}}",
+        ],
+    )?;
+    if !output.status.success() {
+        let err = decode_command_output(&output.stderr);
+        return Err(if err.is_empty() {
+            format!("exit {}", output.status.code().unwrap_or(-1))
+        } else {
+            err.lines().next().unwrap_or(CMD_TIMEOUT_HINT).to_string()
+        });
+    }
+    Ok(parse_docker_networks(&decode_command_output(
+        &output.stdout,
+    )))
+}
+
+/// Parse `docker network ls` tab-separated rows.
+pub fn parse_docker_networks(text: &str) -> Vec<DockerNetwork> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.splitn(4, '\t').collect();
+        if parts.len() < 4 {
+            continue;
+        }
+        out.push(DockerNetwork {
+            id: parts[0].chars().take(12).collect(),
+            name: parts[1].to_string(),
+            driver: parts[2].to_string(),
+            scope: parts[3].to_string(),
+        });
+    }
+    out
+}
+
+fn host_exposure_from_containers(containers: &[DockerContainer]) -> Vec<DockerHostExposure> {
+    let mut out = Vec::new();
+    for c in containers {
+        for p in &c.published {
+            if p.exposure != "all-interfaces" && p.exposure != "lan" {
+                continue;
+            }
+            out.push(DockerHostExposure {
+                container: c.name.clone(),
+                image: c.image.clone(),
+                host_ip: p.host_ip.clone().unwrap_or_else(|| "*".into()),
+                host_port: p.host_port.clone().unwrap_or_else(|| "?".into()),
+                container_port: p.container_port.clone().unwrap_or_else(|| "?".into()),
+                protocol: p.protocol.clone().unwrap_or_else(|| "tcp".into()),
+                exposure: p.exposure.clone(),
+                compose_project: c.compose_project.clone(),
+            });
+        }
+    }
+    out.sort_by(|a, b| {
+        exposure_rank(&b.exposure)
+            .cmp(&exposure_rank(&a.exposure))
+            .then(a.container.cmp(&b.container))
+            .then(a.host_port.cmp(&b.host_port))
+    });
+    out
+}
+
+fn exposure_rank(e: &str) -> u8 {
+    match e {
+        "all-interfaces" => 3,
+        "lan" => 2,
+        "localhost" => 1,
+        _ => 0,
+    }
+}
+
+/// Classify a host bind address for exposure severity.
+pub fn classify_host_bind(host_ip: &str) -> &'static str {
+    let h = host_ip.trim().trim_matches(|c| c == '[' || c == ']');
+    if h.is_empty() || h == "0.0.0.0" || h == "*" || h == "::" || h == "::0" {
+        "all-interfaces"
+    } else if h == "127.0.0.1" || h == "::1" || h.eq_ignore_ascii_case("localhost") {
+        "localhost"
+    } else {
+        "lan"
+    }
+}
+
+/// Parse the `docker ps` Ports column into structured published ports.
+pub fn parse_published_ports(ports: &str) -> Vec<DockerPublishedPort> {
+    let mut out = Vec::new();
+    if ports.trim().is_empty() {
+        return out;
+    }
+    for frag in ports.split(',') {
+        let raw = frag.trim();
+        if raw.is_empty() {
+            continue;
+        }
+        // Published: [host_ip:]host_port->container_port[/proto]
+        // Unmapped expose: 80/tcp
+        if let Some((left, right)) = raw.split_once("->") {
+            let (container_port, protocol) = split_port_proto(right.trim());
+            let left = left.trim();
+            // IPv6 all-interfaces: :::8080  or  [::]:8080
+            let (host_ip, host_port) = if let Some(rest) = left.strip_prefix(":::") {
+                (Some("::".to_string()), Some(rest.to_string()))
+            } else if left.starts_with('[') {
+                // [::]:8080 or [fe80::1]:8080
+                if let Some(end) = left.find(']') {
+                    let ip = left[1..end].to_string();
+                    let rest = left[end + 1..].trim_start_matches(':');
+                    (Some(ip), Some(rest.to_string()))
+                } else {
+                    (None, Some(left.to_string()))
+                }
+            } else if let Some((ip, port)) = left.rsplit_once(':') {
+                // 0.0.0.0:8080 or 127.0.0.1:5432 — last colon splits IP from port
+                // (IPv4 only here; IPv6 handled above)
+                if ip.contains('.') || ip == "*" || ip == "localhost" {
+                    (Some(ip.to_string()), Some(port.to_string()))
+                } else if ip.is_empty() {
+                    (Some("0.0.0.0".into()), Some(port.to_string()))
+                } else {
+                    // bare host port without IP (Docker sometimes omits 0.0.0.0)
+                    (Some("0.0.0.0".into()), Some(left.to_string()))
+                }
+            } else {
+                // host_port only → all interfaces
+                (Some("0.0.0.0".into()), Some(left.to_string()))
+            };
+            let exposure = host_ip
+                .as_deref()
+                .map(classify_host_bind)
+                .unwrap_or("all-interfaces")
+                .to_string();
+            out.push(DockerPublishedPort {
+                raw: raw.to_string(),
+                host_ip,
+                host_port,
+                container_port,
+                protocol,
+                exposure,
+            });
+        } else {
+            let (container_port, protocol) = split_port_proto(raw);
+            out.push(DockerPublishedPort {
+                raw: raw.to_string(),
+                host_ip: None,
+                host_port: None,
+                container_port,
+                protocol,
+                exposure: "unpublished".into(),
+            });
+        }
+    }
+    out
+}
+
+fn split_port_proto(s: &str) -> (Option<String>, Option<String>) {
+    if let Some((port, proto)) = s.split_once('/') {
+        (Some(port.to_string()), Some(proto.to_string()))
+    } else {
+        (Some(s.to_string()), None)
+    }
+}
+
+fn max_exposure_of(published: &[DockerPublishedPort]) -> String {
+    published
+        .iter()
+        .map(|p| p.exposure.as_str())
+        .max_by_key(|e| exposure_rank(e))
+        .unwrap_or("unpublished")
+        .to_string()
+}
+
+fn status_is_running(status: &str) -> bool {
+    let s = status.trim().to_ascii_lowercase();
+    s.starts_with("up ") || s == "up" || s.starts_with("running")
 }
 
 fn detect_docker_install(notes: &mut Vec<String>) -> bool {
@@ -225,15 +525,15 @@ fn detect_docker_install(notes: &mut Vec<String>) -> bool {
 }
 
 fn list_docker_containers(notes: &mut Vec<String>) -> Result<Vec<DockerContainer>, String> {
-    let output = run_hidden(
-        "docker",
-        &[
-            "ps",
-            "-a",
-            "--format",
-            "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}",
-        ],
-    )?;
+    // Prefer 6 fields (compose project label); fall back if template fails on older clients.
+    const FMT_WITH_COMPOSE: &str =
+        "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}\t{{.Label \"com.docker.compose.project\"}}";
+    const FMT_BASIC: &str = "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}";
+
+    let output = match run_hidden("docker", &["ps", "-a", "--format", FMT_WITH_COMPOSE]) {
+        Ok(o) if o.status.success() => o,
+        Ok(_) | Err(_) => run_hidden("docker", &["ps", "-a", "--format", FMT_BASIC])?,
+    };
     if !output.status.success() {
         let err = decode_command_output(&output.stderr);
         return Err(if err.is_empty() {
@@ -248,6 +548,7 @@ fn list_docker_containers(notes: &mut Vec<String>) -> Result<Vec<DockerContainer
     Ok(containers)
 }
 
+/// Parse `docker ps` tab rows (5 or 6 columns; 6th = compose project).
 pub fn parse_docker_ps(text: &str) -> Vec<DockerContainer> {
     let mut out = Vec::new();
     for line in text.lines() {
@@ -255,16 +556,29 @@ pub fn parse_docker_ps(text: &str) -> Vec<DockerContainer> {
         if line.is_empty() {
             continue;
         }
-        let parts: Vec<&str> = line.splitn(5, '\t').collect();
+        let parts: Vec<&str> = line.splitn(6, '\t').collect();
         if parts.len() < 4 {
             continue;
         }
+        let ports = parts.get(4).unwrap_or(&"").to_string();
+        let compose = parts
+            .get(5)
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let published = parse_published_ports(&ports);
+        let max_exposure = max_exposure_of(&published);
+        let status = parts[3].to_string();
         out.push(DockerContainer {
             id: parts[0].chars().take(12).collect(),
             name: parts[1].to_string(),
             image: parts[2].to_string(),
-            status: parts[3].to_string(),
-            ports: parts.get(4).unwrap_or(&"").to_string(),
+            running: status_is_running(&status),
+            status,
+            ports,
+            compose_project: compose,
+            published,
+            max_exposure,
         });
     }
     out
@@ -470,11 +784,62 @@ mod tests {
 
     #[test]
     fn parse_docker_ps_sample() {
-        let sample = "abc123def456\tnginx\tnginx:latest\tUp 2 hours\t0.0.0.0:8080->80/tcp\n";
+        let sample = "abc123def456\tnginx\tnginx:latest\tUp 2 hours\t0.0.0.0:8080->80/tcp\tweb\n";
         let c = parse_docker_ps(sample);
         assert_eq!(c.len(), 1);
         assert_eq!(c[0].name, "nginx");
         assert!(c[0].ports.contains("8080"));
+        assert!(c[0].running);
+        assert_eq!(c[0].compose_project.as_deref(), Some("web"));
+        assert_eq!(c[0].max_exposure, "all-interfaces");
+        assert_eq!(c[0].published.len(), 1);
+        assert_eq!(c[0].published[0].host_port.as_deref(), Some("8080"));
+    }
+
+    #[test]
+    fn parse_published_localhost_and_lan() {
+        let ports = "127.0.0.1:5432->5432/tcp, 10.0.0.5:9000->9000/tcp, 80/tcp";
+        let p = parse_published_ports(ports);
+        assert_eq!(p.len(), 3);
+        assert_eq!(p[0].exposure, "localhost");
+        assert_eq!(p[1].exposure, "lan");
+        assert_eq!(p[2].exposure, "unpublished");
+    }
+
+    #[test]
+    fn parse_published_ipv6_all() {
+        let p = parse_published_ports(":::3000->3000/tcp");
+        assert_eq!(p.len(), 1);
+        assert_eq!(p[0].exposure, "all-interfaces");
+        assert_eq!(p[0].host_port.as_deref(), Some("3000"));
+    }
+
+    #[test]
+    fn classify_host_bind_kinds() {
+        assert_eq!(classify_host_bind("0.0.0.0"), "all-interfaces");
+        assert_eq!(classify_host_bind("::"), "all-interfaces");
+        assert_eq!(classify_host_bind("127.0.0.1"), "localhost");
+        assert_eq!(classify_host_bind("10.0.0.1"), "lan");
+    }
+
+    #[test]
+    fn parse_docker_networks_sample() {
+        let sample = "abc\tbridge\tbridge\tlocal\ndef\thost\thost\tlocal\n";
+        let n = parse_docker_networks(sample);
+        assert_eq!(n.len(), 2);
+        assert_eq!(n[0].name, "bridge");
+        assert_eq!(n[1].driver, "host");
+    }
+
+    #[test]
+    fn host_exposure_skips_localhost() {
+        let sample = "id1\tdb\tpostgres\tUp\t127.0.0.1:5432->5432/tcp\t\nid2\tapi\tapp\tUp\t0.0.0.0:8080->80/tcp\tmyapp\n";
+        let c = parse_docker_ps(sample);
+        let exp = host_exposure_from_containers(&c);
+        assert_eq!(exp.len(), 1);
+        assert_eq!(exp[0].container, "api");
+        assert_eq!(exp[0].exposure, "all-interfaces");
+        assert_eq!(exp[0].compose_project.as_deref(), Some("myapp"));
     }
 
     #[test]
@@ -490,5 +855,7 @@ mod tests {
         let e = probe();
         let _ = e.wsl_detected | e.docker_detected;
         assert!(!e.probed_at.is_empty());
+        // New fields always present
+        let _ = e.docker_running + e.docker_stopped + e.docker_networks.len();
     }
 }

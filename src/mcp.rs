@@ -134,7 +134,7 @@ fn tool_defs() -> Value {
         },
         {
             "name": "builder_stack",
-            "description": "WSL distros, Docker containers, and tagged network adapters on this workstation.",
+            "description": "WSL distros, Docker containers/networks, host-port exposure (non-loopback publishes), and tagged adapters.",
             "inputSchema": { "type": "object", "properties": {} }
         },
         {
@@ -170,8 +170,13 @@ fn call_tool(name: &str, args: &Value, db: &ThreatDatabase) -> Result<Value, Str
                 "wsl_detected": env.wsl_detected,
                 "docker_detected": env.docker_detected,
                 "docker_engine_ok": env.docker_engine_ok,
+                "docker_version": env.docker_version,
+                "docker_running": env.docker_running,
+                "docker_stopped": env.docker_stopped,
+                "docker_host_exposure_count": env.docker_host_exposure.len(),
                 "wsl_distro_count": env.wsl_distros.len(),
                 "docker_container_count": env.docker_containers.len(),
+                "docker_network_count": env.docker_networks.len(),
             })))
         }
         "builder_stack" => {
