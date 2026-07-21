@@ -5,7 +5,6 @@ edition = "2021"
 description = "Local-first workstation security monitor — protecting the builders"
 license = "MIT"
 repository = "https://github.com/AktI-Tech/network-guardian"
-readme = "README.md"
 keywords = ["security", "network", "monitoring", "wsl", "privacy"]
 categories = ["command-line-utilities", "network-programming"]
 
