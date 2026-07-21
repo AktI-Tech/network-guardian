@@ -108,10 +108,40 @@ pub struct ConnectionSample {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WslDistro {
+    pub name: String,
+    pub state: String,
+    pub version: String,
+    pub is_default: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DockerContainer {
+    pub id: String,
+    pub name: String,
+    pub image: String,
+    pub status: String,
+    pub ports: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StackInterface {
+    pub name: String,
+    /// host | wsl | docker | hyper-v | vpn | other
+    pub kind: String,
+    pub ips: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BuilderEnvironment {
     pub wsl_detected: bool,
     pub docker_detected: bool,
+    pub docker_engine_ok: bool,
+    pub wsl_distros: Vec<WslDistro>,
+    pub docker_containers: Vec<DockerContainer>,
+    pub interfaces: Vec<StackInterface>,
     pub notes: Vec<String>,
+    pub probed_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -3,6 +3,7 @@
   let connections = [];
   let destinations = [];
   let alerts = [];
+  let stackEnv = null;
 
   document.querySelectorAll(".tab").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -27,13 +28,85 @@
     return `<span class="badge stack ${esc(hint)}">${esc(hint)}</span>`;
   }
 
-  function renderEnv(status) {
+  function renderEnv(status, env) {
     const pills = [];
-    if (status.wsl_detected) pills.push('<span class="env-pill on">WSL</span>');
-    else pills.push('<span class="env-pill">WSL off</span>');
-    if (status.docker_detected) pills.push('<span class="env-pill on">Docker</span>');
-    else pills.push('<span class="env-pill">Docker off</span>');
+    const wsl = env ? env.wsl_detected : status.wsl_detected;
+    const docker = env ? env.docker_detected : status.docker_detected;
+    if (wsl) {
+      const n = env && env.wsl_distros ? env.wsl_distros.length : 0;
+      pills.push(`<span class="env-pill on">WSL${n ? " · " + n : ""}</span>`);
+    } else pills.push('<span class="env-pill">WSL off</span>');
+    if (docker) {
+      const n = env && env.docker_containers ? env.docker_containers.length : 0;
+      const eng = env && env.docker_engine_ok === false ? " (engine?)" : "";
+      pills.push(`<span class="env-pill on">Docker${n ? " · " + n : ""}${eng}</span>`);
+    } else pills.push('<span class="env-pill">Docker off</span>');
     $("env-pills").innerHTML = pills.join("");
+  }
+
+  function renderStack() {
+    const env = stackEnv || {};
+    const distros = env.wsl_distros || [];
+    const containers = env.docker_containers || [];
+    const ifaces = (env.interfaces || []).filter((i) => i.kind && i.kind !== "host");
+
+    $("wsl-count").textContent = distros.length ? `(${distros.length})` : "";
+    $("docker-count").textContent = containers.length
+      ? `(${containers.length})`
+      : env.docker_detected
+        ? env.docker_engine_ok
+          ? "(0)"
+          : "(engine unreachable)"
+        : "";
+
+    $("wsl-body").innerHTML = distros.length
+      ? distros
+          .map(
+            (d) => `<tr>
+        <td>${d.is_default ? "★" : ""}</td>
+        <td>${esc(d.name)}</td>
+        <td>${esc(d.state)}</td>
+        <td>${esc(d.version)}</td>
+      </tr>`
+          )
+          .join("")
+      : `<tr><td colspan="4" class="muted">${env.wsl_detected ? "No distros listed" : "WSL not detected"}</td></tr>`;
+
+    $("docker-body").innerHTML = containers.length
+      ? containers
+          .map(
+            (c) => `<tr>
+        <td>${esc(c.name)}</td>
+        <td title="${esc(c.image)}">${esc(truncate(c.image, 36))}</td>
+        <td>${esc(c.status)}</td>
+        <td title="${esc(c.ports)}">${esc(truncate(c.ports || "—", 40))}</td>
+      </tr>`
+          )
+          .join("")
+      : `<tr><td colspan="4" class="muted">${
+          env.docker_detected
+            ? env.docker_engine_ok
+              ? "No containers"
+              : "Docker CLI/engine not responding"
+            : "Docker not detected"
+        }</td></tr>`;
+
+    $("iface-body").innerHTML = ifaces.length
+      ? ifaces
+          .map(
+            (i) => `<tr>
+        <td>${stackBadge(i.kind)}</td>
+        <td>${esc(i.name)}</td>
+        <td>${esc((i.ips || []).join(", ") || "—")}</td>
+      </tr>`
+          )
+          .join("")
+      : `<tr><td colspan="3" class="muted">No WSL/Docker/Hyper-V adapters tagged</td></tr>`;
+
+    const notes = env.notes || [];
+    $("stack-notes").textContent = notes.length
+      ? "Notes: " + notes.join(" · ")
+      : "";
   }
 
   function renderConnections() {
@@ -143,16 +216,18 @@
 
   async function refresh() {
     try {
-      const [status, conn, dest, al] = await Promise.all([
+      const [status, conn, dest, al, env] = await Promise.all([
         fetch("/api/status").then((r) => r.json()),
         fetch("/api/connections").then((r) => r.json()),
         fetch("/api/destinations").then((r) => r.json()),
         fetch("/api/alerts").then((r) => r.json()),
+        fetch("/api/environment").then((r) => r.json()).catch(() => null),
       ]);
 
       connections = conn.connections || [];
       destinations = dest.destinations || [];
       alerts = al.alerts || [];
+      stackEnv = env;
 
       $("c-conn").textContent = String(status.connection_count ?? connections.length);
       $("c-alerts").textContent = String(status.alert_count ?? alerts.length);
@@ -160,9 +235,10 @@
       $("status-pill").textContent = "live · " + (status.listening || "127.0.0.1");
       $("status-pill").classList.add("live");
       $("footer-meta").textContent = `v${status.version || "?"} · sample ${status.sample_interval_secs || "?"}s`;
-      renderEnv(status);
+      renderEnv(status, env);
 
       renderConnections();
+      renderStack();
       renderDestinations();
       renderAlerts();
     } catch (e) {

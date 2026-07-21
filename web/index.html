@@ -30,6 +30,7 @@
 
   <nav class="tabs">
     <button class="tab active" data-tab="connections">Connections</button>
+    <button class="tab" data-tab="stack">Stack</button>
     <button class="tab" data-tab="destinations">Destinations</button>
     <button class="tab" data-tab="alerts">Alerts</button>
   </nav>
@@ -58,6 +59,39 @@
           </thead>
           <tbody id="conn-body"></tbody>
         </table>
+      </div>
+    </section>
+
+    <section id="panel-stack" class="panel">
+      <div class="stack-grid">
+        <div class="stack-block">
+          <h3>WSL distros <span class="muted" id="wsl-count"></span></h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th></th><th>Name</th><th>State</th><th>Version</th></tr></thead>
+              <tbody id="wsl-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="stack-block">
+          <h3>Docker containers <span class="muted" id="docker-count"></span></h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Image</th><th>Status</th><th>Ports</th></tr></thead>
+              <tbody id="docker-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="stack-block full">
+          <h3>Tagged adapters</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Kind</th><th>Name</th><th>IPs</th></tr></thead>
+              <tbody id="iface-body"></tbody>
+            </table>
+          </div>
+          <p class="stack-notes" id="stack-notes"></p>
+        </div>
       </div>
     </section>
 
