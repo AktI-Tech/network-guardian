@@ -1,4 +1,7 @@
 //! Loopback HTTP API + static dashboard (privacy: bind 127.0.0.1 only by default).
+//!
+//! No CORS layer: the dashboard is same-origin. `allow_origin(Any)` would let any
+//! website read connection/alert data via a browser on this machine.
 
 use crate::models::AgentStatus;
 use crate::sensors::environment;
@@ -10,7 +13,6 @@ use axum::Router;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
-use tower_http::cors::{Any, CorsLayer};
 
 const DASHBOARD_HTML: &str = include_str!("../web/index.html");
 const DASHBOARD_CSS: &str = include_str!("../web/style.css");
@@ -25,11 +27,6 @@ pub struct AppState {
 }
 
 pub fn router(state: AppState) -> Router {
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
-
     Router::new()
         .route("/", get(dashboard))
         .route("/style.css", get(style_css))
@@ -40,7 +37,6 @@ pub fn router(state: AppState) -> Router {
         .route("/api/destinations", get(api_destinations))
         .route("/api/stats", get(api_stats))
         .route("/api/environment", get(api_environment))
-        .layer(cors)
         .with_state(state)
 }
 

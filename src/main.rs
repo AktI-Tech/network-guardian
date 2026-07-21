@@ -208,6 +208,9 @@ async fn run_serve(db: Arc<ThreatDatabase>, bind: String, sample_secs: u64) {
         process::exit(1);
     }
 
+    // Clamp once so dashboard status matches actual sampler cadence.
+    let sample_secs = sample_secs.max(1);
+
     let state = AppState {
         db: Arc::clone(&db),
         started: Instant::now(),
@@ -239,6 +242,7 @@ async fn run_serve(db: Arc<ThreatDatabase>, bind: String, sample_secs: u64) {
 
 async fn run_connection_sampler(db: Arc<ThreatDatabase>, sample_secs: u64) {
     let mut engine = RuleEngine::new();
+    // Caller must pass an already-clamped interval (>= 1).
     let interval = Duration::from_secs(sample_secs.max(1));
     println!(
         "🔍 Connection sampler every {}s (process → destination)\n",
@@ -296,10 +300,13 @@ fn print_connections_once() {
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max {
+    if s.chars().count() <= max {
         s.to_string()
     } else {
-        format!("{}…", &s[..max.saturating_sub(1)])
+        format!(
+            "{}…",
+            s.chars().take(max.saturating_sub(1)).collect::<String>()
+        )
     }
 }
 
@@ -520,4 +527,17 @@ fn print_usage() {
     println!("  help                        Show this help");
     println!();
     println!("Dashboard: http://127.0.0.1:8787/  (loopback only)");
+}
+
+#[cfg(test)]
+mod truncate_tests {
+    use super::truncate;
+
+    #[test]
+    fn truncate_multibyte_utf8_does_not_panic() {
+        let s = "进程名αβγδ";
+        let t = truncate(s, 4);
+        assert!(t.ends_with('…'));
+        assert!(t.chars().count() <= 4);
+    }
 }

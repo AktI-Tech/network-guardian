@@ -5,7 +5,7 @@
 
 ## Overview
 
-```
+```text
 Browser (localhost)  →  ng-api (axum, 127.0.0.1)  →  SQLite
                               ↑
                      connection sampler + rules

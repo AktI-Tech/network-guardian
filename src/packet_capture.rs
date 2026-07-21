@@ -187,7 +187,29 @@ pub fn parse_packet(data: &[u8]) -> Option<PacketInfo> {
 }
 
 fn locate_l3(data: &[u8]) -> Option<(usize, u16)> {
-    // Raw IPv4/IPv6 (some capture configs)
+    // Prefer Ethernet framing first. Checking "raw IP" via the high nibble of data[0]
+    // before Ethernet mis-parses normal frames when the first MAC octet looks like
+    // IPv4 version 4 (0x40–0x4F) or IPv6 version 6 (0x60–0x6F).
+    if data.len() >= 14 {
+        let mut ethertype = u16::from_be_bytes([data[12], data[13]]);
+        let mut offset = 14usize;
+
+        // 802.1Q VLAN tag
+        if ethertype == 0x8100 {
+            if data.len() < 18 {
+                return None;
+            }
+            ethertype = u16::from_be_bytes([data[16], data[17]]);
+            offset = 18;
+        }
+
+        if ethertype == 0x0800 || ethertype == 0x86dd {
+            return Some((offset, ethertype));
+        }
+    }
+
+    // Raw IPv4/IPv6 only when the frame is not clearly Ethernet IP
+    // (Linux cooked capture, some VPN/tunnel paths).
     if !data.is_empty() {
         let version = data[0] >> 4;
         if version == 4 && data.len() >= 20 {
@@ -196,26 +218,6 @@ fn locate_l3(data: &[u8]) -> Option<(usize, u16)> {
         if version == 6 && data.len() >= 40 {
             return Some((0, 0x86dd));
         }
-    }
-
-    if data.len() < 14 {
-        return None;
-    }
-
-    let mut ethertype = u16::from_be_bytes([data[12], data[13]]);
-    let mut offset = 14usize;
-
-    // 802.1Q VLAN tag
-    if ethertype == 0x8100 {
-        if data.len() < 18 {
-            return None;
-        }
-        ethertype = u16::from_be_bytes([data[16], data[17]]);
-        offset = 18;
-    }
-
-    if ethertype == 0x0800 || ethertype == 0x86dd {
-        return Some((offset, ethertype));
     }
 
     None
@@ -369,5 +371,15 @@ mod tests {
     #[test]
     fn rejects_garbage() {
         assert!(parse_packet(&[0u8; 10]).is_none());
+    }
+
+    #[test]
+    fn ethernet_not_misread_as_raw_ip_when_mac_looks_like_v4() {
+        // Dest MAC starts with 0x45 (version nibble 4) — must still use Ethernet offset.
+        let mut frame = ethernet_ipv4_tcp();
+        frame[0] = 0x45;
+        let info = parse_packet(&frame).expect("parse");
+        assert_eq!(info.src_ip, Some(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))));
+        assert_eq!(info.dst_port, Some(443));
     }
 }

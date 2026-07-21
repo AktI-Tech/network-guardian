@@ -76,7 +76,7 @@ Deep design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/THREAT_MODEL.
 
 ## Project layout
 
-```
+```text
 src/
   main.rs              CLI entry (serve is default)
   sensors/             Host connection sampler

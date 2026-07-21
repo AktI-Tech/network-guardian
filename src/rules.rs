@@ -47,7 +47,9 @@ impl RuleEngine {
         for s in samples {
             let key = dest_key(s);
 
-            if self.seen_destinations.insert(key.clone())
+            let is_new = self.seen_destinations.insert(key.clone());
+
+            if is_new
                 && self.alert_first_seen_unknown
                 && s.category == DestinationCategory::Unknown
                 && !is_local_category(&s.category)
@@ -67,11 +69,28 @@ impl RuleEngine {
                 });
             }
 
-            if self.alert_llm_traffic && s.category == DestinationCategory::Llm {
-                // Only emit when newly seen to avoid spam
-                // (already covered if unknown; for known LLM labels fire once via seen set above)
-                // Additional explicit low-severity breadcrumb for LLM label hits on first key insert handled above.
-                let _ = s.destination_label.as_ref();
+            // First-seen LLM destinations get a low-severity breadcrumb (not covered by
+            // first-seen-unknown, which only fires for DestinationCategory::Unknown).
+            if is_new && self.alert_llm_traffic && s.category == DestinationCategory::Llm {
+                let label = s
+                    .destination_label
+                    .as_deref()
+                    .or(s.resolved_host.as_deref())
+                    .unwrap_or(&s.remote_addr);
+                alerts.push(ThreatAlert {
+                    threat_type: ThreatType::Policy,
+                    severity: ThreatSeverity::Low,
+                    ip: s.remote_addr.parse::<IpAddr>().ok(),
+                    description: format!(
+                        "LLM destination first seen: {} ({}:{}) via {} (pid {})",
+                        label,
+                        s.remote_addr,
+                        s.remote_port,
+                        s.process_name.as_deref().unwrap_or("unknown"),
+                        s.pid.unwrap_or(0)
+                    ),
+                    timestamp: Local::now(),
+                });
             }
 
             // Suspicious remote ports with process context
@@ -182,5 +201,25 @@ mod tests {
         let a = eng.evaluate(&s2);
         assert_eq!(a.len(), 1);
         assert!(a[0].description.contains("5.6.7.8"));
+    }
+
+    #[test]
+    fn first_seen_llm_alerts_low() {
+        let mut eng = RuleEngine::new();
+        let s1 = vec![sample(
+            "1.2.3.4",
+            443,
+            DestinationCategory::Llm,
+            "chrome.exe",
+        )];
+        assert!(eng.evaluate(&s1).is_empty()); // seed
+        let s2 = vec![
+            sample("1.2.3.4", 443, DestinationCategory::Llm, "chrome.exe"),
+            sample("9.9.9.9", 443, DestinationCategory::Llm, "chrome.exe"),
+        ];
+        let a = eng.evaluate(&s2);
+        assert_eq!(a.len(), 1);
+        assert!(a[0].description.contains("LLM destination"));
+        assert_eq!(a[0].severity, ThreatSeverity::Low);
     }
 }

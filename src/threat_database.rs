@@ -47,7 +47,11 @@ impl ThreatDatabase {
     where
         F: FnOnce(&Connection) -> SqlResult<T>,
     {
-        let conn = self.connection.lock().expect("database mutex poisoned");
+        // Recover the connection if a prior holder panicked — avoid permanent outage.
+        let conn = match self.connection.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         f(&conn)
     }
 
@@ -99,7 +103,8 @@ impl ThreatDatabase {
                     remote_addr TEXT NOT NULL,
                     remote_port INTEGER NOT NULL,
                     state TEXT NOT NULL,
-                    pid INTEGER,
+                    -- Use -1 for unknown pid so UNIQUE works (SQLite NULLs never match).
+                    pid INTEGER NOT NULL DEFAULT -1,
                     process_name TEXT,
                     process_path TEXT,
                     category TEXT NOT NULL,
@@ -155,80 +160,96 @@ impl ThreatDatabase {
     pub fn upsert_connection_samples(&self, samples: &[ConnectionSample]) -> SqlResult<usize> {
         let now = Local::now().to_rfc3339();
         self.with_conn(|connection| {
-            let mut count = 0usize;
-            for s in samples {
-                connection.execute(
-                    "INSERT INTO destinations (host_or_ip, category, label, first_seen, last_seen, hit_count)
-                     VALUES (?, ?, ?, ?, ?, 1)
-                     ON CONFLICT(host_or_ip) DO UPDATE SET
-                        last_seen=excluded.last_seen,
-                        hit_count=hit_count+1,
-                        category=excluded.category,
-                        label=COALESCE(excluded.label, destinations.label)",
-                    params![
-                        s.remote_addr,
-                        s.category.as_str(),
-                        s.destination_label,
-                        now,
-                        now,
-                    ],
-                )?;
-
-                if let Some(pid) = s.pid {
-                    let name = s.process_name.as_deref().unwrap_or("unknown");
+            connection.execute_batch("BEGIN IMMEDIATE")?;
+            let result = (|| {
+                let mut count = 0usize;
+                for s in samples {
                     connection.execute(
-                        "INSERT INTO processes (pid, name, path, first_seen, last_seen)
-                         VALUES (?, ?, ?, ?, ?)
-                         ON CONFLICT(pid, name) DO UPDATE SET
+                        "INSERT INTO destinations (host_or_ip, category, label, first_seen, last_seen, hit_count)
+                         VALUES (?, ?, ?, ?, ?, 1)
+                         ON CONFLICT(host_or_ip) DO UPDATE SET
                             last_seen=excluded.last_seen,
-                            path=COALESCE(excluded.path, processes.path)",
-                        params![pid as i64, name, s.process_path, now, now],
+                            hit_count=hit_count+1,
+                            category=excluded.category,
+                            label=COALESCE(excluded.label, destinations.label)",
+                        params![
+                            s.remote_addr,
+                            s.category.as_str(),
+                            s.destination_label,
+                            now,
+                            now,
+                        ],
                     )?;
+
+                    if let Some(pid) = s.pid {
+                        let name = s.process_name.as_deref().unwrap_or("unknown");
+                        connection.execute(
+                            "INSERT INTO processes (pid, name, path, first_seen, last_seen)
+                             VALUES (?, ?, ?, ?, ?)
+                             ON CONFLICT(pid, name) DO UPDATE SET
+                                last_seen=excluded.last_seen,
+                                path=COALESCE(excluded.path, processes.path)",
+                            params![pid as i64, name, s.process_path, now, now],
+                        )?;
+                    }
+
+                    // -1 sentinel for unknown pid keeps UNIQUE meaningful under SQLite.
+                    let pid_key = s.pid.map(|p| p as i64).unwrap_or(-1);
+                    connection.execute(
+                        "INSERT INTO connections (
+                            protocol, local_addr, local_port, remote_addr, remote_port, state,
+                            pid, process_name, process_path, category, destination_label,
+                            resolved_host, stack_hint, first_seen, last_seen
+                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         ON CONFLICT(protocol, pid, local_port, remote_addr, remote_port) DO UPDATE SET
+                            state=excluded.state,
+                            process_name=excluded.process_name,
+                            process_path=excluded.process_path,
+                            category=excluded.category,
+                            destination_label=excluded.destination_label,
+                            resolved_host=excluded.resolved_host,
+                            stack_hint=excluded.stack_hint,
+                            last_seen=excluded.last_seen",
+                        params![
+                            s.protocol,
+                            s.local_addr,
+                            s.local_port as i64,
+                            s.remote_addr,
+                            s.remote_port as i64,
+                            s.state,
+                            pid_key,
+                            s.process_name,
+                            s.process_path,
+                            s.category.as_str(),
+                            s.destination_label,
+                            s.resolved_host,
+                            s.stack_hint,
+                            now,
+                            now,
+                        ],
+                    )?;
+                    count += 1;
                 }
 
+                let cutoff = (Local::now() - chrono::Duration::minutes(2)).to_rfc3339();
                 connection.execute(
-                    "INSERT INTO connections (
-                        protocol, local_addr, local_port, remote_addr, remote_port, state,
-                        pid, process_name, process_path, category, destination_label,
-                        resolved_host, stack_hint, first_seen, last_seen
-                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                     ON CONFLICT(protocol, pid, local_port, remote_addr, remote_port) DO UPDATE SET
-                        state=excluded.state,
-                        process_name=excluded.process_name,
-                        process_path=excluded.process_path,
-                        category=excluded.category,
-                        destination_label=excluded.destination_label,
-                        resolved_host=excluded.resolved_host,
-                        stack_hint=excluded.stack_hint,
-                        last_seen=excluded.last_seen",
-                    params![
-                        s.protocol,
-                        s.local_addr,
-                        s.local_port as i64,
-                        s.remote_addr,
-                        s.remote_port as i64,
-                        s.state,
-                        s.pid.map(|p| p as i64),
-                        s.process_name,
-                        s.process_path,
-                        s.category.as_str(),
-                        s.destination_label,
-                        s.resolved_host,
-                        s.stack_hint,
-                        now,
-                        now,
-                    ],
+                    "DELETE FROM connections WHERE last_seen < ?",
+                    params![cutoff],
                 )?;
-                count += 1;
+
+                Ok(count)
+            })();
+
+            match result {
+                Ok(count) => {
+                    connection.execute_batch("COMMIT")?;
+                    Ok(count)
+                }
+                Err(e) => {
+                    let _ = connection.execute_batch("ROLLBACK");
+                    Err(e)
+                }
             }
-
-            let cutoff = (Local::now() - chrono::Duration::minutes(2)).to_rfc3339();
-            connection.execute(
-                "DELETE FROM connections WHERE last_seen < ?",
-                params![cutoff],
-            )?;
-
-            Ok(count)
         })
     }
 
@@ -255,7 +276,14 @@ impl ThreatDatabase {
                         remote_addr: row.get(3)?,
                         remote_port: row.get::<_, i64>(4)? as u16,
                         state: row.get(5)?,
-                        pid: row.get::<_, Option<i64>>(6)?.map(|p| p as u32),
+                        pid: {
+                            let raw: i64 = row.get(6)?;
+                            if raw < 0 {
+                                None
+                            } else {
+                                Some(raw as u32)
+                            }
+                        },
                         process_name: row.get(7)?,
                         process_path: row.get(8)?,
                         category: DestinationCategory::from_str_lossy(&category_s),

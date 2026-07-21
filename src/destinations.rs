@@ -113,9 +113,17 @@ const HOST_RULES: &[(&str, DestinationCategory, &str)] = &[
     ("gstatic.com", DestinationCategory::Cloud, "Google static"),
     ("google.com", DestinationCategory::Cloud, "Google"),
     ("1e100.net", DestinationCategory::Cloud, "Google"),
-    ("googlevideo.com", DestinationCategory::Cloud, "YouTube / Google"),
+    (
+        "googlevideo.com",
+        DestinationCategory::Cloud,
+        "YouTube / Google",
+    ),
     ("cloudflare.com", DestinationCategory::Cloud, "Cloudflare"),
-    ("cloudflaressl.com", DestinationCategory::Cloud, "Cloudflare"),
+    (
+        "cloudflaressl.com",
+        DestinationCategory::Cloud,
+        "Cloudflare",
+    ),
     (
         "cloudflare-dns.com",
         DestinationCategory::Cloud,
