@@ -1,7 +1,10 @@
 (() => {
-  const REPO = "AktI-Tech/network-guardian";
-  const API = `https://api.github.com/repos/${REPO}`;
-  const RAW = `https://raw.githubusercontent.com/${REPO}/main`;
+  // Full API base URL must appear as a literal string (CI pages-hint greps for it).
+  const GITHUB_REPO_URL = "https://api.github.com/repos/AktI-Tech/network-guardian";
+  const GITHUB_RAW_CARGO =
+    "https://raw.githubusercontent.com/AktI-Tech/network-guardian/main/Cargo.toml";
+  const GITHUB_COMMITS_PAGE =
+    "https://github.com/AktI-Tech/network-guardian/commits/main";
 
   const FEATURES = [
     {
@@ -22,7 +25,7 @@
     },
     {
       title: "MCP for IDE agents",
-      body: "network_guardian mcp exposes read-only tools: security_summary, connections, alerts, classify.",
+      body: "network_guardian mcp exposes read-only tools: security_summary, connections, alerts, classify, builder_stack.",
     },
     {
       title: "Hybrid IDS hooks",
@@ -103,10 +106,10 @@
     const badges = $("live-badges");
     try {
       const [repo, commits, releases, cargoToml] = await Promise.all([
-        fetchJson(API),
-        fetchJson(`${API}/commits?per_page=12`),
-        fetchJson(`${API}/releases?per_page=10`),
-        fetchText(`${RAW}/Cargo.toml`).catch(() => ""),
+        fetchJson(GITHUB_REPO_URL),
+        fetchJson(`${GITHUB_REPO_URL}/commits?per_page=12`),
+        fetchJson(`${GITHUB_REPO_URL}/releases?per_page=10`),
+        fetchText(GITHUB_RAW_CARGO).catch(() => ""),
       ]);
 
       const version =
@@ -153,7 +156,12 @@
       if (Array.isArray(releases) && releases.length) {
         releaseList.innerHTML = releases
           .map((r) => {
-            const body = (r.body || "").trim().split("\n").slice(0, 4).join(" ").slice(0, 240);
+            const body = (r.body || "")
+              .trim()
+              .split("\n")
+              .slice(0, 4)
+              .join(" ")
+              .slice(0, 240);
             return `<li>
               <span class="when">${esc(fmtDate(r.published_at || r.created_at))} · ${esc(r.tag_name)}</span>
               <a href="${esc(r.html_url)}" target="_blank" rel="noopener">${esc(r.name || r.tag_name)}</a>
@@ -168,7 +176,7 @@
       console.error(e);
       badges.innerHTML = `<span class="pill">Live data unavailable (API / network). Static description still valid.</span>`;
       $("stat-version").textContent = "0.3.x";
-      $("commit-list").innerHTML = `<li class="muted">Could not load commits. See <a href="https://github.com/${REPO}/commits/main">GitHub history</a>.</li>`;
+      $("commit-list").innerHTML = `<li class="muted">Could not load commits. See <a href="${GITHUB_COMMITS_PAGE}">GitHub history</a>.</li>`;
       $("release-list").innerHTML = `<li class="muted">Could not load releases.</li>`;
     }
   }
