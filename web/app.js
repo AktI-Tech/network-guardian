@@ -5,6 +5,7 @@
   let alerts = [];
   let stackEnv = null;
   let rulesCfg = null;
+  let regionSnap = null;
 
   document.querySelectorAll(".tab").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -29,7 +30,7 @@
     return `<span class="badge stack ${esc(hint)}">${esc(hint)}</span>`;
   }
 
-  function renderEnv(status, env) {
+  function renderEnv(status, env, region) {
     const pills = [];
     const wsl = env ? env.wsl_detected : status.wsl_detected;
     const docker = env ? env.docker_detected : status.docker_detected;
@@ -42,7 +43,100 @@
       const eng = env && env.docker_engine_ok === false ? " (engine?)" : "";
       pills.push(`<span class="env-pill on">Docker${n ? " · " + n : ""}${eng}</span>`);
     } else pills.push('<span class="env-pill">Docker off</span>');
+    if (region && region.enabled) {
+      const st = (region.status || "watch").toLowerCase();
+      const exp = region.local_exposure && region.local_exposure.level
+        ? region.local_exposure.level
+        : "none";
+      pills.push(
+        `<span class="env-pill on" title="Regional radar">NP · ${esc(st)} · ${esc(exp)}</span>`
+      );
+    } else if (region && region.enabled === false) {
+      pills.push('<span class="env-pill">Region off</span>');
+    }
     $("env-pills").innerHTML = pills.join("");
+  }
+
+  function renderRegion() {
+    const r = regionSnap;
+    if (!r) {
+      $("region-status").textContent = "unavailable";
+      $("region-summary").textContent = "Could not load /api/region";
+      return;
+    }
+    const st = (r.status || "watch").toLowerCase();
+    $("region-status").className = "region-status " + st;
+    $("region-status").textContent = st;
+    $("region-meta").textContent = `${r.region_code || "NP"} · ${r.scope || "south_asia"}${
+      r.is_sample ? " · sample pack" : ""
+    } · loaded ${esc(shortTime(r.loaded_at))}`;
+    $("region-summary").textContent = r.summary || "";
+    $("region-disclaimer").textContent = r.disclaimer || "";
+
+    const exp = r.local_exposure || {};
+    $("region-exposure").textContent = (exp.level || "—").toUpperCase();
+    $("region-live").textContent = String(exp.matched_live ?? 0);
+    $("region-dest").textContent = String(exp.matched_destinations ?? 0);
+    $("region-watch").textContent = exp.watchlist_active ? "yes" : "no";
+
+    const industries = r.industries || [];
+    $("region-industries").innerHTML = industries.length
+      ? industries
+          .map(
+            (i) => `<div class="heat-row">
+        <div class="heat-label"><span>${esc(i.name)}</span><span>${i.score}</span></div>
+        <div class="heat-bar"><div class="heat-fill" style="width:${Math.min(
+          100,
+          Number(i.score) || 0
+        )}%"></div></div>
+        <div class="muted" style="font-size:0.78rem;margin-top:0.25rem">${esc(i.rationale || "")}</div>
+      </div>`
+          )
+          .join("")
+      : '<p class="muted">No industry data</p>';
+
+    const campaigns = r.campaigns || [];
+    $("region-campaigns").innerHTML = campaigns.length
+      ? campaigns
+          .map(
+            (c) => `<div class="campaign-card">
+        <h4>${esc(c.title)} <span class="badge ${esc(c.severity || "")}">${esc(
+              c.severity || ""
+            )}</span></h4>
+        <p>${esc(c.summary || "")}</p>
+        <p style="margin-top:0.35rem">${esc((c.countries || []).join(", "))} · ${esc(
+              (c.sectors || []).join(", ")
+            )} · ${esc(c.confidence || "")}
+        ${
+          c.source_url
+            ? ` · <a href="${esc(c.source_url)}" target="_blank" rel="noopener">source</a>`
+            : ""
+        }</p>
+      </div>`
+          )
+          .join("")
+      : '<p class="muted">No campaigns in pack</p>';
+
+    const matches = (exp.matches || []).slice(0, 50);
+    $("region-matches").innerHTML = matches.length
+      ? matches
+          .map(
+            (m) => `<tr>
+        <td>${esc(m.ioc_type)}</td>
+        <td>${esc(m.value)}</td>
+        <td>${esc(m.matched_as)}</td>
+        <td>${esc(m.process_name || "—")}</td>
+        <td title="${esc(m.notes || "")}">${esc(truncate(m.notes || "—", 48))}</td>
+      </tr>`
+          )
+          .join("")
+      : `<tr><td colspan="5" class="muted">No IoC overlap with this PC</td></tr>`;
+
+    $("region-notes").textContent = (exp.notes || []).join(" · ");
+    const sources = r.sources || [];
+    $("region-sources").textContent = sources.length
+      ? "Sources: " + sources.map((s) => s.name).join(" · ")
+      : "";
   }
 
   function renderStack() {
@@ -235,13 +329,14 @@
 
   async function refresh() {
     try {
-      const [status, conn, dest, al, env, rules] = await Promise.all([
+      const [status, conn, dest, al, env, rules, region] = await Promise.all([
         fetch("/api/status").then((r) => r.json()),
         fetch("/api/connections").then((r) => r.json()),
         fetch("/api/destinations").then((r) => r.json()),
         fetch("/api/alerts").then((r) => r.json()),
         fetch("/api/environment").then((r) => r.json()).catch(() => null),
         fetch("/api/rules").then((r) => r.json()).catch(() => null),
+        fetch("/api/region").then((r) => r.json()).catch(() => null),
       ]);
 
       connections = conn.connections || [];
@@ -249,6 +344,7 @@
       alerts = al.alerts || [];
       stackEnv = env;
       rulesCfg = rules;
+      regionSnap = region;
 
       $("c-conn").textContent = String(status.connection_count ?? connections.length);
       $("c-alerts").textContent = String(status.alert_count ?? alerts.length);
@@ -256,12 +352,13 @@
       $("status-pill").textContent = "live · " + (status.listening || "127.0.0.1");
       $("status-pill").classList.add("live");
       $("footer-meta").textContent = `v${status.version || "?"} · sample ${status.sample_interval_secs || "?"}s`;
-      renderEnv(status, env);
+      renderEnv(status, env, region);
 
       renderConnections();
       renderStack();
       renderDestinations();
       renderAlerts();
+      renderRegion();
       renderRules();
     } catch (e) {
       $("status-pill").textContent = "offline";

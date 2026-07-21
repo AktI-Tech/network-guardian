@@ -1,0 +1,9 @@
+# Regional threat radar (R1) — opt-in situational awareness
+# Privacy: feeds are not pulled yet; this pack is local sample OSINT-style data.
+# Correlation with YOUR connections always stays on this machine.
+
+enabled: true
+region_code: "NP"
+scope: "south_asia"
+# How long a loaded snapshot is considered fresh (minutes)
+cache_ttl_minutes: 60

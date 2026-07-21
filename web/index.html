@@ -33,6 +33,7 @@
     <button class="tab" data-tab="stack">Stack</button>
     <button class="tab" data-tab="destinations">Destinations</button>
     <button class="tab" data-tab="alerts">Alerts</button>
+    <button class="tab" data-tab="region">Region</button>
     <button class="tab" data-tab="rules">Rules</button>
   </nav>
 
@@ -127,6 +128,46 @@
           </thead>
           <tbody id="alert-body"></tbody>
         </table>
+      </div>
+    </section>
+
+    <section id="panel-region" class="panel">
+      <div class="region-panel">
+        <div class="region-header">
+          <div>
+            <span class="region-status" id="region-status">—</span>
+            <span class="muted" id="region-meta"></span>
+          </div>
+          <p class="region-summary" id="region-summary"></p>
+          <p class="stack-notes" id="region-disclaimer"></p>
+        </div>
+        <div class="cards region-cards">
+          <div class="card"><div class="label">Local exposure</div><div class="value" id="region-exposure">—</div></div>
+          <div class="card"><div class="label">Live IoC hits</div><div class="value" id="region-live">—</div></div>
+          <div class="card"><div class="label">Dest hits</div><div class="value" id="region-dest">—</div></div>
+          <div class="card"><div class="label">Watchlist active</div><div class="value" id="region-watch">—</div></div>
+        </div>
+        <div class="stack-grid">
+          <div class="stack-block">
+            <h3>Industry heat</h3>
+            <div id="region-industries"></div>
+          </div>
+          <div class="stack-block">
+            <h3>Campaigns</h3>
+            <div id="region-campaigns"></div>
+          </div>
+          <div class="stack-block full">
+            <h3>Local matches</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Type</th><th>Value</th><th>How</th><th>Process</th><th>Notes</th></tr></thead>
+                <tbody id="region-matches"></tbody>
+              </table>
+            </div>
+            <p class="stack-notes" id="region-notes"></p>
+            <p class="stack-notes" id="region-sources"></p>
+          </div>
+        </div>
       </div>
     </section>
 

@@ -181,6 +181,48 @@ tbody tr:hover { background: rgba(61, 156, 240, 0.06); }
   white-space: pre-wrap;
 }
 
+.region-panel { padding: 0.5rem 0 0; }
+.region-header { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); }
+.region-status {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  margin-right: 0.5rem;
+}
+.region-status.quiet { color: var(--ok); border-color: #1f3d32; }
+.region-status.watch { color: var(--warn); border-color: #5c4a1f; }
+.region-status.elevated, .region-status.critical { color: var(--high); border-color: #5c1f1f; }
+.region-summary { margin: 0.6rem 0 0.35rem; font-size: 0.92rem; color: var(--text); }
+.region-cards { padding: 0.75rem 1rem 0; margin: 0; }
+.heat-row { margin: 0.45rem 0 0.7rem; }
+.heat-label { display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 0.2rem; }
+.heat-bar {
+  height: 8px;
+  background: #0d1420;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.heat-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3d9cf0, #a78bfa);
+  border-radius: 999px;
+}
+.campaign-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  margin: 0.5rem 0;
+  background: var(--bg);
+}
+.campaign-card h4 { margin: 0 0 0.3rem; font-size: 0.9rem; }
+.campaign-card p { margin: 0; font-size: 0.8rem; color: var(--muted); }
+
 .rules-panel { padding: 0.5rem 0 0; }
 .rules-summary {
   padding: 0.75rem 1rem;
