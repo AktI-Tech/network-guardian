@@ -136,6 +136,11 @@ fn tool_defs() -> Value {
             "name": "builder_stack",
             "description": "WSL distros, Docker containers, and tagged network adapters on this workstation.",
             "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "list_rules",
+            "description": "Show active YAML policy: allowlist, watchlist, fan-out threshold, ports.",
+            "inputSchema": { "type": "object", "properties": {} }
         }
     ])
 }
@@ -167,6 +172,10 @@ fn call_tool(name: &str, args: &Value, db: &ThreatDatabase) -> Result<Value, Str
         "builder_stack" => {
             let env = environment::probe_cached();
             Ok(tool_text(serde_json::to_value(env).unwrap_or(json!({}))))
+        }
+        "list_rules" => {
+            let cfg = crate::rules::RuleConfig::load(None);
+            Ok(tool_text(serde_json::to_value(cfg).unwrap_or(json!({}))))
         }
         "list_active_connections" => {
             let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;

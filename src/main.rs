@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 
 use crate::api::AppState;
 use crate::models::ThreatAlert;
-use crate::rules::RuleEngine;
+use crate::rules::{RuleConfig, RuleEngine};
 use crate::sensors::connections;
 use crate::suricata::EveTail;
 use crate::threat_database::{ThreatDatabase, ThreatRecord};
@@ -48,6 +48,7 @@ enum Command {
     Mcp,
     Connections,
     Stack,
+    Rules,
     Stats,
     Recent(u32),
     Severity(String),
@@ -97,6 +98,7 @@ async fn main() {
         }
         Command::Connections => print_connections_once(),
         Command::Stack => print_stack(),
+        Command::Rules => print_rules(),
         Command::Stats => print_stats(&db),
         Command::Recent(limit) => print_recent(&db, limit),
         Command::Severity(level) => print_by_severity(&db, &level),
@@ -119,6 +121,7 @@ fn parse_command(args: Vec<String>) -> Result<Command, String> {
         "monitor" => Ok(Command::Monitor),
         "mcp" => Ok(Command::Mcp),
         "stack" => Ok(Command::Stack),
+        "rules" => Ok(Command::Rules),
         "serve" => {
             let mut bind = DEFAULT_BIND.to_string();
             let mut sample_secs = DEFAULT_SAMPLE_SECS;
@@ -223,13 +226,11 @@ async fn run_serve(db: Arc<ThreatDatabase>, bind: String, sample_secs: u64, eve:
     println!("   Protecting the builders\n");
     println!("✅ Database: {}", DB_PATH);
 
-    let engine = RuleEngine::new();
-    println!(
-        "📜 Rules: first_seen_unknown={} llm_traffic={} suspicious_ports={}",
-        engine.config().settings.alert_first_seen_unknown,
-        engine.config().settings.alert_llm_traffic,
-        engine.config().suspicious_ports.len()
-    );
+    let rules = Arc::new(RuleConfig::load(None));
+    println!("📜 Rules loaded:");
+    for line in rules.summary_lines() {
+        println!("   · {}", line);
+    }
 
     let env = crate::sensors::environment::probe();
     if env.wsl_detected {
@@ -263,12 +264,14 @@ async fn run_serve(db: Arc<ThreatDatabase>, bind: String, sample_secs: u64, eve:
         bind: addr.to_string(),
         sample_interval_secs: sample_secs,
         events: event_tx.clone(),
+        rules: Arc::clone(&rules),
     };
 
     let sampler_db = Arc::clone(&db);
     let sampler_tx = event_tx.clone();
+    let sampler_rules = Arc::clone(&rules);
     let sampler = tokio::spawn(async move {
-        run_connection_sampler(sampler_db, sample_secs, sampler_tx, None).await;
+        run_connection_sampler(sampler_db, sample_secs, sampler_tx, sampler_rules).await;
     });
 
     let eve_handle = if let Some(path) = eve {
@@ -312,9 +315,9 @@ async fn run_connection_sampler(
     db: Arc<ThreatDatabase>,
     sample_secs: u64,
     events: broadcast::Sender<String>,
-    _unused: Option<()>,
+    rules: Arc<RuleConfig>,
 ) {
-    let mut engine = RuleEngine::new();
+    let mut engine = RuleEngine::from_config((*rules).clone());
     let interval = Duration::from_secs(sample_secs.max(1));
     println!(
         "🔍 Connection sampler every {}s (process → destination)\n",
@@ -381,6 +384,44 @@ async fn run_eve_ingest(db: Arc<ThreatDatabase>, path: PathBuf, events: broadcas
         }
         tokio::time::sleep(interval).await;
     }
+}
+
+fn print_rules() {
+    let cfg = RuleConfig::load(None);
+    println!("📜 NetworkGuardian policy rules");
+    for line in cfg.summary_lines() {
+        println!("   {}", line);
+    }
+    println!("\nSettings:");
+    println!(
+        "   first_seen_unknown: {}",
+        cfg.settings.alert_first_seen_unknown
+    );
+    println!("   llm_traffic:        {}", cfg.settings.alert_llm_traffic);
+    println!(
+        "   high_fanout:        {}",
+        cfg.settings.high_fanout_threshold
+    );
+    println!(
+        "\nSuspicious ports ({}): {:?}",
+        cfg.suspicious_ports.len(),
+        cfg.suspicious_ports
+    );
+    println!("\nProcess allowlist ({}):", cfg.process_allowlist.len());
+    for p in &cfg.process_allowlist {
+        println!("   - {}", p);
+    }
+    println!("\nProcess watchlist ({}):", cfg.process_watchlist.len());
+    for p in &cfg.process_watchlist {
+        println!("   - {}", p);
+    }
+    if !cfg.llm_process_filter.is_empty() {
+        println!("\nLLM process filter:");
+        for p in &cfg.llm_process_filter {
+            println!("   - {}", p);
+        }
+    }
+    println!("\nEdit rules/default.yml and restart serve to apply.");
 }
 
 fn print_stack() {
@@ -703,6 +744,7 @@ fn print_usage() {
     println!("  mcp                         MCP stdio server (read-only tools for IDE agents)");
     println!("  connections                 One-shot process → destination table");
     println!("  stack                       WSL distros, Docker containers, adapter tags");
+    println!("  rules                       Show loaded YAML policy (allow/watch/fan-out)");
     println!("  monitor                     Live packet monitor (needs --features packet-capture)");
     println!("  stats                       Show threat + connection summary");
     println!("  recent [limit]              Show recent alerts");

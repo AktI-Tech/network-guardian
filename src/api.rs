@@ -4,6 +4,7 @@
 //! website read connection/alert data via a browser on this machine.
 
 use crate::models::AgentStatus;
+use crate::rules::RuleConfig;
 use crate::sensors::environment;
 use crate::threat_database::ThreatDatabase;
 use axum::extract::State;
@@ -31,6 +32,7 @@ pub struct AppState {
     pub bind: String,
     pub sample_interval_secs: u64,
     pub events: broadcast::Sender<String>,
+    pub rules: Arc<RuleConfig>,
 }
 
 pub fn router(state: AppState) -> Router {
@@ -44,6 +46,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/destinations", get(api_destinations))
         .route("/api/stats", get(api_stats))
         .route("/api/environment", get(api_environment))
+        .route("/api/rules", get(api_rules))
         .route("/api/events", get(api_events))
         .with_state(state)
 }
@@ -106,6 +109,10 @@ async fn api_status(State(state): State<AppState>) -> Json<AgentStatus> {
 
 async fn api_environment() -> impl IntoResponse {
     Json(environment::probe_cached())
+}
+
+async fn api_rules(State(state): State<AppState>) -> impl IntoResponse {
+    Json((*state.rules).clone())
 }
 
 async fn api_connections(State(state): State<AppState>) -> impl IntoResponse {
