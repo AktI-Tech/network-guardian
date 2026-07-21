@@ -38,6 +38,7 @@ __pycache__/
 
 # Documentation (local only — do not commit)
 *.md
+!README.md
 /docs/
 *.txt
 # Allow license as legal text, not docs
