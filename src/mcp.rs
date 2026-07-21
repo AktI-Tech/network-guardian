@@ -131,6 +131,11 @@ fn tool_defs() -> Value {
                 },
                 "required": ["host_or_ip"]
             }
+        },
+        {
+            "name": "builder_stack",
+            "description": "WSL distros, Docker containers, and tagged network adapters on this workstation.",
+            "inputSchema": { "type": "object", "properties": {} }
         }
     ])
 }
@@ -154,7 +159,14 @@ fn call_tool(name: &str, args: &Value, db: &ThreatDatabase) -> Result<Value, Str
                 "alerts_high_or_critical": stats.high + stats.critical,
                 "wsl_detected": env.wsl_detected,
                 "docker_detected": env.docker_detected,
+                "docker_engine_ok": env.docker_engine_ok,
+                "wsl_distro_count": env.wsl_distros.len(),
+                "docker_container_count": env.docker_containers.len(),
             })))
+        }
+        "builder_stack" => {
+            let env = environment::probe_cached();
+            Ok(tool_text(serde_json::to_value(env).unwrap_or(json!({}))))
         }
         "list_active_connections" => {
             let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;

@@ -38,6 +38,7 @@ cargo run --release
 ```bash
 network_guardian serve --bind 127.0.0.1:8787 --interval 2
 network_guardian connections          # one-shot process → dest table
+network_guardian stack                # WSL distros, Docker containers, adapters
 network_guardian mcp                  # MCP stdio server for IDE agents
 network_guardian stats
 network_guardian recent 20
@@ -69,15 +70,17 @@ cargo run --release --features packet-capture -- monitor
 }
 ```
 
-Tools (read-only): `security_summary`, `list_active_connections`, `list_alerts`, `destination_category`.
+Tools (read-only): `security_summary`, `list_active_connections`, `list_alerts`, `destination_category`, `builder_stack`.
 
 ## What works today
 
 - **Process ↔ socket sampling** (active TCP only — filters TIME_WAIT noise)
 - **Destination categories**: `llm`, `registry`, `cloud`, `lan`, `localhost`, `unknown`
 - **AI client process boost** (e.g. `grok.exe` → llm even on CDN IPs)
+- **Builder stack**: WSL distro list (`wsl -l -v`), Docker containers/ports, tagged adapters
 - **Reverse DNS** (cached) so CDN IPs can map to known hosts / labels
 - **Stack hints**: `wsl`, `docker`, `llm-local` from process names + env probe
+- **Builder stack panel**: WSL distro list, Docker containers/ports, tagged adapters
 - **YAML rules** (`rules/default.yml`) + embedded defaults
 - **MCP stdio server** for coding agents
 - **SSE** live ticks (`/api/events`) + dashboard

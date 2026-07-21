@@ -47,6 +47,7 @@ enum Command {
     },
     Mcp,
     Connections,
+    Stack,
     Stats,
     Recent(u32),
     Severity(String),
@@ -95,6 +96,7 @@ async fn main() {
             }
         }
         Command::Connections => print_connections_once(),
+        Command::Stack => print_stack(),
         Command::Stats => print_stats(&db),
         Command::Recent(limit) => print_recent(&db, limit),
         Command::Severity(level) => print_by_severity(&db, &level),
@@ -116,6 +118,7 @@ fn parse_command(args: Vec<String>) -> Result<Command, String> {
     match args[0].as_str() {
         "monitor" => Ok(Command::Monitor),
         "mcp" => Ok(Command::Mcp),
+        "stack" => Ok(Command::Stack),
         "serve" => {
             let mut bind = DEFAULT_BIND.to_string();
             let mut sample_secs = DEFAULT_SAMPLE_SECS;
@@ -380,6 +383,72 @@ async fn run_eve_ingest(db: Arc<ThreatDatabase>, path: PathBuf, events: broadcas
     }
 }
 
+fn print_stack() {
+    let env = crate::sensors::environment::probe();
+    println!("🛡️  Builder stack");
+    println!("   Probed: {}", env.probed_at);
+    println!(
+        "   WSL: {}    Docker: {} (engine ok: {})",
+        env.wsl_detected, env.docker_detected, env.docker_engine_ok
+    );
+    if !env.notes.is_empty() {
+        println!("\nNotes:");
+        for n in &env.notes {
+            println!("   · {}", n);
+        }
+    }
+    if !env.wsl_distros.is_empty() {
+        println!("\nWSL distros:");
+        for d in &env.wsl_distros {
+            let def = if d.is_default { "*" } else { " " };
+            println!("  {} {:<24} {:<12} v{}", def, d.name, d.state, d.version);
+        }
+    }
+    if !env.docker_containers.is_empty() {
+        println!("\nDocker containers:");
+        for c in &env.docker_containers {
+            println!(
+                "  {:<14} {:<20} {:<28} {}",
+                truncate(&c.id, 12),
+                truncate(&c.name, 20),
+                truncate(&c.image, 28),
+                c.status
+            );
+            if !c.ports.is_empty() {
+                println!("               ports: {}", c.ports);
+            }
+        }
+    } else if env.docker_detected {
+        println!("\nDocker containers: (none listed)");
+    }
+    if !env.interfaces.is_empty() {
+        println!("\nNetwork adapters (tagged):");
+        for i in env
+            .interfaces
+            .iter()
+            .filter(|i| i.kind != "host" || !i.ips.is_empty())
+        {
+            if i.kind == "host" && i.ips.is_empty() {
+                continue;
+            }
+            // Show non-host always; host only if has IPs (cap noise)
+            if i.kind == "host" {
+                continue;
+            }
+            println!(
+                "  [{:<7}] {}  {}",
+                i.kind,
+                i.name,
+                if i.ips.is_empty() {
+                    "—".into()
+                } else {
+                    i.ips.join(", ")
+                }
+            );
+        }
+    }
+}
+
 fn print_connections_once() {
     match connections::sample_connections() {
         Ok(samples) => {
@@ -633,6 +702,7 @@ fn print_usage() {
     println!("                              Start dashboard + connection sampler (default)");
     println!("  mcp                         MCP stdio server (read-only tools for IDE agents)");
     println!("  connections                 One-shot process → destination table");
+    println!("  stack                       WSL distros, Docker containers, adapter tags");
     println!("  monitor                     Live packet monitor (needs --features packet-capture)");
     println!("  stats                       Show threat + connection summary");
     println!("  recent [limit]              Show recent alerts");

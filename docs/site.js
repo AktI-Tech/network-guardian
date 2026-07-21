@@ -36,8 +36,8 @@
       body: "Loopback-only API, local SQLite, no cloud phone-home. Elevated rights only when capture needs it.",
     },
     {
-      title: "Builder stack aware",
-      body: "WSL and Docker presence probes; roadmap for deeper container and agent-tool visibility.",
+      title: "Builder stack panel",
+      body: "WSL distro list, Docker containers and published ports, tagged Hyper-V/WSL/Docker adapters — CLI stack + MCP builder_stack.",
     },
   ];
 
