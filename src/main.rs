@@ -5,6 +5,7 @@ mod api;
 mod autostart;
 mod daemon;
 mod destinations;
+mod feeds;
 mod mcp;
 mod models;
 mod network_monitor;
@@ -56,6 +57,7 @@ enum Command {
     Stack,
     Rules,
     Region,
+    RegionRefresh,
     Autostart {
         action: AutostartAction,
     },
@@ -117,6 +119,7 @@ async fn main() {
         Command::Stack => print_stack(),
         Command::Rules => print_rules(),
         Command::Region => print_region(Some(&db)),
+        Command::RegionRefresh => print_region_refresh(Some(&db)),
         Command::Autostart { action } => run_autostart(action),
         Command::Stats => print_stats(&db),
         Command::Recent(limit) => print_recent(&db, limit),
@@ -142,7 +145,13 @@ fn parse_command(args: Vec<String>) -> Result<Command, String> {
         "mcp" => Ok(Command::Mcp),
         "stack" => Ok(Command::Stack),
         "rules" => Ok(Command::Rules),
-        "region" => Ok(Command::Region),
+        "region" => match args.get(1).map(|s| s.as_str()) {
+            Some("refresh") | Some("--refresh") => Ok(Command::RegionRefresh),
+            None | Some("show") | Some("status") => Ok(Command::Region),
+            Some(other) => Err(format!(
+                "unknown region action '{other}' (use region | region refresh)"
+            )),
+        },
         "autostart" => {
             let action = args.get(1).map(|s| s.as_str()).unwrap_or("status");
             match action {
@@ -539,8 +548,18 @@ async fn run_eve_ingest(db: Arc<ThreatDatabase>, path: PathBuf, events: broadcas
 }
 
 fn print_region(db: Option<&ThreatDatabase>) {
+    print_region_inner(db, false);
+}
+
+fn print_region_refresh(db: Option<&ThreatDatabase>) {
+    println!("🔄 Forcing regional feed refresh (pull-only; no local data uploaded)…");
+    crate::region::refresh_feeds();
+    print_region_inner(db, true);
+}
+
+fn print_region_inner(db: Option<&ThreatDatabase>, force_feeds: bool) {
     let rules = RuleConfig::load(None);
-    let snap = crate::region::snapshot_with_local(db, &rules.process_watchlist);
+    let snap = crate::region::snapshot_with_local_opts(db, &rules.process_watchlist, force_feeds);
     println!("🌏 Regional threat radar");
     println!("   Region: {}  Scope: {}", snap.region_code, snap.scope);
     println!(
@@ -548,9 +567,26 @@ fn print_region(db: Option<&ThreatDatabase>) {
         snap.status.to_uppercase(),
         snap.enabled
     );
-    println!("   Sample pack: {}", snap.is_sample);
+    println!(
+        "   Sample pack: {}  Live feeds: {}",
+        snap.is_sample, snap.feeds_enabled
+    );
     println!("\n{}", snap.summary);
     println!("\nDisclaimer: {}", snap.disclaimer);
+    if !snap.feed_pulls.is_empty() {
+        println!("\nFeed pulls:");
+        for p in &snap.feed_pulls {
+            let flag = if p.ok { "ok" } else { "ERR" };
+            let cache = if p.from_cache { " cache" } else { "" };
+            println!(
+                "   [{flag}{cache}] {}  iocs={}  {}",
+                p.name, p.ioc_count, p.message
+            );
+            if !p.url.is_empty() {
+                println!("            {}", p.url);
+            }
+        }
+    }
     if !snap.industries.is_empty() {
         println!("\nIndustry heat:");
         for i in &snap.industries {
@@ -567,6 +603,7 @@ fn print_region(db: Option<&ThreatDatabase>) {
             println!("     {}", c.summary);
         }
     }
+    println!("\nIoCs loaded: {}", snap.iocs.len());
     let exp = &snap.local_exposure;
     println!("\nLocal exposure: {}", exp.level.to_uppercase());
     println!(
@@ -604,6 +641,11 @@ fn print_rules() {
         cfg.settings.high_fanout_threshold
     );
     println!(
+        "   denylist:           {}",
+        cfg.settings.alert_destination_denylist
+    );
+    println!("   cidr_match:         {}", cfg.settings.alert_cidr_match);
+    println!(
         "\nSuspicious ports ({}): {:?}",
         cfg.suspicious_ports.len(),
         cfg.suspicious_ports
@@ -615,6 +657,45 @@ fn print_rules() {
     println!("\nProcess watchlist ({}):", cfg.process_watchlist.len());
     for p in &cfg.process_watchlist {
         println!("   - {}", p);
+    }
+    if !cfg.destination_allowlist.is_empty() {
+        println!(
+            "\nDestination allowlist ({}):",
+            cfg.destination_allowlist.len()
+        );
+        for d in &cfg.destination_allowlist {
+            println!("   - {}", d);
+        }
+    }
+    if !cfg.destination_denylist.is_empty() {
+        println!(
+            "\nDestination denylist ({}):",
+            cfg.destination_denylist.len()
+        );
+        for d in &cfg.destination_denylist {
+            println!("   - {}", d);
+        }
+    }
+    if !cfg.cidr_rules.is_empty() {
+        println!("\nCIDR rules ({}):", cfg.cidr_rules.len());
+        for r in &cfg.cidr_rules {
+            println!(
+                "   - {} action={} severity={} {}",
+                r.cidr, r.action, r.severity, r.note
+            );
+        }
+    }
+    if !cfg.custom_rules.is_empty() {
+        println!("\nCustom rules ({}):", cfg.custom_rules.len());
+        for r in &cfg.custom_rules {
+            println!(
+                "   - [{}] action={} severity={} first_seen_only={}",
+                r.id, r.action, r.severity, r.first_seen_only
+            );
+            if !r.message.is_empty() {
+                println!("     {}", r.message);
+            }
+        }
     }
     if !cfg.llm_process_filter.is_empty() {
         println!("\nLLM process filter:");
@@ -1001,8 +1082,8 @@ fn print_usage() {
     println!("  mcp                         MCP stdio server (read-only tools for IDE agents)");
     println!("  connections                 One-shot process → destination table");
     println!("  stack                       WSL distros, Docker containers, adapter tags");
-    println!("  rules                       Show loaded YAML policy (allow/watch/fan-out)");
-    println!("  region                      Nepal/South Asia threat radar + local exposure");
+    println!("  rules                       Show loaded YAML policy (v3: allow/deny/CIDR/custom)");
+    println!("  region [refresh]            Nepal/South Asia radar; refresh = force feed pull");
     println!("  monitor                     Live packet monitor (needs --features packet-capture)");
     println!("  stats                       Show threat + connection summary");
     println!("  recent [limit]              Show recent alerts");

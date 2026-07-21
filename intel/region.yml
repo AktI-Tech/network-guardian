@@ -1,9 +1,31 @@
-# Regional threat radar (R1) — opt-in situational awareness
-# Privacy: feeds are not pulled yet; this pack is local sample OSINT-style data.
-# Correlation with YOUR connections always stays on this machine.
+# Regional threat radar — opt-in situational awareness
+# Privacy: connection data never leaves this PC.
+# Live feeds (R2) are HTTP GET pull-only and disabled by default.
 
 enabled: true
 region_code: "NP"
 scope: "south_asia"
-# How long a loaded snapshot is considered fresh (minutes)
+# In-memory snapshot reuse (minutes); feed HTTP cache uses feeds.refresh_minutes
 cache_ttl_minutes: 60
+
+feeds:
+  # Set true (or NG_REGION_FEEDS=1) to pull configured sources.
+  # Or set NG_REGION_FEED_URL=https://…/pack.json for a single JSON pack.
+  enabled: false
+  refresh_minutes: 360
+  timeout_secs: 15
+  # user_agent: "NetworkGuardian/0.9 (local-only)"
+  sources:
+    # Example JSON pack (same schema as intel/np_sa_sample.json):
+    # - name: operator-pack
+    #   url: https://example.com/np_sa.json
+    #   format: json_pack
+    #   enabled: true
+    #
+    # Example plain IoC list (one IP/domain per line, # comments ok):
+    # - name: line-blocklist
+    #   url: https://example.com/iocs.txt
+    #   format: line_iocs
+    #   ioc_type: ip
+    #   enabled: true
+    []

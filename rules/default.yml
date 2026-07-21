@@ -1,6 +1,11 @@
 # NetworkGuardian default policy (Protecting the builders)
 # Edit this file and restart `serve` to apply.
-version: 2
+#
+# v3 language:
+#   destination_allowlist / destination_denylist  — host/IP substrings or .suffix
+#   cidr_rules                                    — allow | alert by CIDR
+#   custom_rules                                  — process/category/host/ip/port matchers
+version: 3
 
 settings:
   # First connection to an unknown public host → policy alert
@@ -9,6 +14,8 @@ settings:
   alert_llm_traffic: true
   # Unique remote IPs per process in one sample above this → fan-out alert (0 = off)
   high_fanout_threshold: 25
+  alert_destination_denylist: true
+  alert_cidr_match: true
 
 suspicious_ports:
   - 21
@@ -62,3 +69,54 @@ process_watchlist:
 
 # Optional: only alert LLM first-seen when process matches (empty = any process)
 llm_process_filter: []
+
+# Destination host/IP allow — suppress first-seen noise (.suffix or substring)
+destination_allowlist:
+  - ".microsoft.com"
+  - ".windows.com"
+  - ".windowsupdate.com"
+  - ".office.com"
+  - ".live.com"
+  - ".github.com"
+  - ".githubusercontent.com"
+  - ".npmjs.org"
+  - ".pypi.org"
+  - ".pythonhosted.org"
+  - ".rust-lang.org"
+  - ".crates.io"
+  - "1.1.1.1"
+  - "8.8.8.8"
+  - "8.8.4.4"
+  - "9.9.9.9"
+
+# Always alert (High) when seen — add operator denylist entries here
+destination_denylist: []
+
+# CIDR rules: action allow | alert
+# Example:
+# - cidr: "185.220.101.0/24"
+#   action: alert
+#   severity: high
+#   note: "Tor exit sample range"
+cidr_rules: []
+
+# Custom match rules (YAML key is `match`)
+custom_rules:
+  - id: python-raw-ip
+    match:
+      process: python
+      category: unknown
+      raw_ip_only: true
+    action: alert
+    severity: high
+    first_seen_only: true
+    message: "Python to unresolved public IP"
+  - id: node-raw-ip
+    match:
+      process: node
+      category: unknown
+      raw_ip_only: true
+    action: alert
+    severity: high
+    first_seen_only: true
+    message: "Node to unresolved public IP"

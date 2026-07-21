@@ -1,8 +1,9 @@
-//! Regional threat radar (R1 snapshot + R4 local correlation).
+//! Regional threat radar (R1 snapshot + R2 opt-in live feeds + R4 local correlation).
 //!
-//! Privacy: loads a local sample pack by default. Does not upload connection data.
-//! Opt out via intel/region.yml `enabled: false` or NG_REGION_ENABLED=0.
+//! Privacy: local sample pack by default. Live feeds are **pull-only** HTTP GETs
+//! (never upload connections). Opt out via `intel/region.yml` or `NG_REGION_ENABLED=0`.
 
+use crate::feeds::{self, FeedPullStatus, FeedsConfig};
 use crate::models::{ConnectionSample, DestinationCategory};
 use crate::sensors::connections;
 use crate::threat_database::{DestinationRecord, ThreatDatabase};
@@ -11,13 +12,14 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 
 const EMBEDDED_SNAPSHOT: &str = include_str!("../intel/np_sa_sample.json");
 const EMBEDDED_CONFIG: &str = include_str!("../intel/region.yml");
 
-static CACHED: OnceLock<parking_lot::Mutex<Option<RegionalSnapshot>>> = OnceLock::new();
+static CACHED: OnceLock<parking_lot::Mutex<Option<(Instant, RegionalSnapshot)>>> = OnceLock::new();
 
-fn cache() -> &'static parking_lot::Mutex<Option<RegionalSnapshot>> {
+fn cache() -> &'static parking_lot::Mutex<Option<(Instant, RegionalSnapshot)>> {
     CACHED.get_or_init(|| parking_lot::Mutex::new(None))
 }
 
@@ -31,6 +33,8 @@ pub struct RegionConfig {
     pub scope: String,
     #[serde(default = "default_ttl")]
     pub cache_ttl_minutes: u32,
+    #[serde(default)]
+    pub feeds: FeedsConfig,
 }
 
 fn default_true() -> bool {
@@ -53,6 +57,7 @@ impl Default for RegionConfig {
             region_code: default_region(),
             scope: default_scope(),
             cache_ttl_minutes: default_ttl(),
+            feeds: FeedsConfig::default(),
         }
     }
 }
@@ -172,18 +177,27 @@ pub struct LocalExposure {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct SnapshotFile {
+pub struct SnapshotFile {
     #[serde(default)]
-    schema_version: u32,
-    region_code: String,
-    scope: String,
-    status: String,
-    summary: String,
-    generated_at: String,
-    industries: Vec<IndustryHeat>,
-    campaigns: Vec<RegionalCampaign>,
-    iocs: Vec<RegionalIoc>,
-    sources: Vec<RegionalSource>,
+    pub schema_version: u32,
+    #[serde(default)]
+    pub region_code: String,
+    #[serde(default)]
+    pub scope: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub generated_at: String,
+    #[serde(default)]
+    pub industries: Vec<IndustryHeat>,
+    #[serde(default)]
+    pub campaigns: Vec<RegionalCampaign>,
+    #[serde(default)]
+    pub iocs: Vec<RegionalIoc>,
+    #[serde(default)]
+    pub sources: Vec<RegionalSource>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,6 +210,9 @@ pub struct RegionalSnapshot {
     pub generated_at: String,
     pub loaded_at: String,
     pub is_sample: bool,
+    /// Live feed pulls attempted (R2); empty when feeds disabled.
+    pub feeds_enabled: bool,
+    pub feed_pulls: Vec<FeedPullStatus>,
     pub industries: Vec<IndustryHeat>,
     pub campaigns: Vec<RegionalCampaign>,
     pub iocs: Vec<RegionalIoc>,
@@ -215,6 +232,8 @@ impl RegionalSnapshot {
             generated_at: Local::now().to_rfc3339(),
             loaded_at: Local::now().to_rfc3339(),
             is_sample: true,
+            feeds_enabled: false,
+            feed_pulls: vec![],
             industries: vec![],
             campaigns: vec![],
             iocs: vec![],
@@ -234,21 +253,51 @@ impl RegionalSnapshot {
 
 /// Full snapshot with fresh local correlation.
 pub fn snapshot_with_local(db: Option<&ThreatDatabase>, watchlist: &[String]) -> RegionalSnapshot {
+    snapshot_with_local_opts(db, watchlist, false)
+}
+
+/// Like [`snapshot_with_local`] but can force feed re-fetch (`region refresh`).
+pub fn snapshot_with_local_opts(
+    db: Option<&ThreatDatabase>,
+    watchlist: &[String],
+    force_feeds: bool,
+) -> RegionalSnapshot {
     let cfg = RegionConfig::load();
     if !cfg.enabled {
         return RegionalSnapshot::disabled(&cfg.region_code, &cfg.scope);
     }
 
-    let mut base = load_base_snapshot(&cfg);
+    // Short in-memory cache so dashboard polls do not re-merge feeds every 2s.
+    // Local correlation always re-runs; HTTP feed TTL is separate (disk cache).
+    if !force_feeds {
+        let guard = cache().lock();
+        if let Some((at, snap)) = guard.as_ref() {
+            if at.elapsed() < Duration::from_secs(30) {
+                let mut snap = snap.clone();
+                drop(guard);
+                let live = connections::sample_connections().unwrap_or_default();
+                let dests = db
+                    .and_then(|d| d.get_destinations(500).ok())
+                    .unwrap_or_default();
+                snap.local_exposure = correlate(&snap.iocs, &live, &dests, watchlist);
+                snap.loaded_at = Local::now().to_rfc3339();
+                return snap;
+            }
+        }
+    }
+
+    let mut base = load_base_snapshot(&cfg, force_feeds);
     let live = connections::sample_connections().unwrap_or_default();
     let dests = db
         .and_then(|d| d.get_destinations(500).ok())
         .unwrap_or_default();
     base.local_exposure = correlate(&base.iocs, &live, &dests, watchlist);
+
+    *cache().lock() = Some((Instant::now(), base.clone()));
     base
 }
 
-fn load_base_snapshot(cfg: &RegionConfig) -> RegionalSnapshot {
+fn load_base_snapshot(cfg: &RegionConfig, force_feeds: bool) -> RegionalSnapshot {
     // Prefer disk pack so operators can drop updated JSON without rebuild.
     let file = if Path::new("intel/np_sa_sample.json").exists() {
         std::fs::read_to_string("intel/np_sa_sample.json").ok()
@@ -260,7 +309,64 @@ fn load_base_snapshot(cfg: &RegionConfig) -> RegionalSnapshot {
         serde_json::from_str(EMBEDDED_SNAPSHOT).expect("embedded snapshot valid")
     });
 
-    let status = RegionalStatus::from_str_lossy(&parsed.status);
+    let merge = feeds::pull_and_merge(&cfg.feeds, force_feeds);
+    let feeds_on = feeds::feeds_enabled(&cfg.feeds);
+
+    let mut iocs = parsed.iocs;
+    let mut campaigns = parsed.campaigns;
+    let mut sources = parsed.sources;
+    let mut status = RegionalStatus::from_str_lossy(&parsed.status);
+    let mut summary = parsed.summary;
+    let mut is_sample = true;
+
+    if merge.any_live {
+        is_sample = false;
+        iocs.extend(merge.iocs);
+        // Dedupe IoCs
+        let mut seen = HashSet::new();
+        iocs.retain(|i| {
+            let k = format!(
+                "{}|{}",
+                i.ioc_type.to_ascii_lowercase(),
+                i.value.to_ascii_lowercase()
+            );
+            seen.insert(k)
+        });
+        if !merge.campaigns.is_empty() {
+            campaigns.extend(merge.campaigns);
+        }
+        sources.extend(merge.sources);
+        if let Some(s) = merge.status {
+            status = RegionalStatus::from_str_lossy(&s);
+        }
+        if let Some(s) = merge.summary {
+            summary = s;
+        }
+    } else if feeds_on {
+        // feeds on but nothing pulled — still sample
+        sources.extend(merge.sources);
+    }
+
+    // Always surface feed pull diagnostics
+    for p in &merge.pulls {
+        if !p.url.is_empty() {
+            sources.push(RegionalSource {
+                name: format!("feed:{}", p.name),
+                url: p.url.clone(),
+                kind: if p.ok { "feed_ok" } else { "feed_err" }.into(),
+                note: p.message.clone(),
+            });
+        }
+    }
+
+    let disclaimer = if is_sample {
+        "OSINT-style sample pack + optional live pulls. Not an official CERT feed. Connection data never leaves this PC."
+            .into()
+    } else {
+        "Merged local sample pack with opt-in live feed pulls (HTTP GET only). Connection data never leaves this PC."
+            .into()
+    };
+
     RegionalSnapshot {
         enabled: true,
         region_code: if parsed.region_code.is_empty() {
@@ -274,14 +380,16 @@ fn load_base_snapshot(cfg: &RegionConfig) -> RegionalSnapshot {
             parsed.scope
         },
         status: status.as_str().into(),
-        summary: parsed.summary,
+        summary,
         generated_at: parsed.generated_at,
         loaded_at: Local::now().to_rfc3339(),
-        is_sample: true,
+        is_sample,
+        feeds_enabled: feeds_on,
+        feed_pulls: merge.pulls,
         industries: parsed.industries,
-        campaigns: parsed.campaigns,
-        iocs: parsed.iocs,
-        sources: parsed.sources,
+        campaigns,
+        iocs,
+        sources,
         local_exposure: LocalExposure {
             level: "none".into(),
             matched_live: 0,
@@ -290,7 +398,7 @@ fn load_base_snapshot(cfg: &RegionConfig) -> RegionalSnapshot {
             notes: vec![],
             matches: vec![],
         },
-        disclaimer: "OSINT-style sample for perspective. Not an official CERT feed. Confidence is limited until live feeds (R2) and curated AktI-Tech packs (R5).".into(),
+        disclaimer,
     }
 }
 
@@ -481,9 +589,16 @@ fn name_matches(process_name: &str, patterns: &[String]) -> bool {
         .any(|p| !p.is_empty() && n.contains(&p.to_ascii_lowercase()))
 }
 
-/// Invalidate in-memory cache (for future refresh).
+/// Invalidate in-memory cache (forces pack/feed re-merge on next snapshot).
 pub fn clear_cache() {
     *cache().lock() = None;
+}
+
+/// Force feed refresh + clear memory cache (CLI `region refresh`).
+pub fn refresh_feeds() {
+    clear_cache();
+    let cfg = RegionConfig::load();
+    let _ = feeds::pull_and_merge(&cfg.feeds, true);
 }
 
 #[cfg(test)]
@@ -515,11 +630,13 @@ mod tests {
     #[test]
     fn loads_embedded_snapshot() {
         let cfg = RegionConfig::default();
-        let s = load_base_snapshot(&cfg);
+        let s = load_base_snapshot(&cfg, false);
         assert!(s.enabled);
         assert!(!s.campaigns.is_empty());
         assert!(!s.industries.is_empty());
         assert!(!s.iocs.is_empty());
+        assert!(s.is_sample);
+        assert!(!s.feeds_enabled);
     }
 
     #[test]

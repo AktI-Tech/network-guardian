@@ -67,9 +67,16 @@
     const st = (r.status || "watch").toLowerCase();
     $("region-status").className = "region-status " + st;
     $("region-status").textContent = st;
-    $("region-meta").textContent = `${r.region_code || "NP"} · ${r.scope || "south_asia"}${
-      r.is_sample ? " · sample pack" : ""
-    } · loaded ${esc(shortTime(r.loaded_at))}`;
+    const feedTag = r.feeds_enabled
+      ? r.is_sample
+        ? " · feeds on (sample fallback)"
+        : " · live feeds"
+      : r.is_sample
+        ? " · sample pack"
+        : "";
+    $("region-meta").textContent = `${r.region_code || "NP"} · ${r.scope || "south_asia"}${feedTag} · loaded ${esc(
+      shortTime(r.loaded_at)
+    )}`;
     $("region-summary").textContent = r.summary || "";
     $("region-disclaimer").textContent = r.disclaimer || "";
 
@@ -137,6 +144,29 @@
     $("region-sources").textContent = sources.length
       ? "Sources: " + sources.map((s) => s.name).join(" · ")
       : "";
+
+    const pulls = r.feed_pulls || [];
+    $("region-feeds").innerHTML = pulls.length
+      ? pulls
+          .map((p) => {
+            const st = p.ok
+              ? p.from_cache
+                ? "ok (cache)"
+                : "ok"
+              : "error";
+            return `<tr>
+        <td>${esc(p.name)}</td>
+        <td>${esc(st)}</td>
+        <td>${esc(String(p.ioc_count ?? 0))}</td>
+        <td title="${esc(p.url || "")}">${esc(truncate(p.message || "—", 64))}</td>
+      </tr>`;
+          })
+          .join("")
+      : `<tr><td colspan="4" class="muted">${
+          r.feeds_enabled
+            ? "No feed pulls recorded"
+            : "Live feeds off — set feeds.enabled in intel/region.yml or NG_REGION_FEEDS=1"
+        }</td></tr>`;
   }
 
   function exposureBadge(level) {
@@ -379,13 +409,37 @@
     }
     const s = r.settings || {};
     $("rules-summary").textContent =
-      `v${r.version ?? "?"} · first_seen_unknown=${s.alert_first_seen_unknown} · llm_traffic=${s.alert_llm_traffic} · fanout≥${s.high_fanout_threshold ?? "—"} · ports=${(r.suspicious_ports || []).length}`;
+      `v${r.version ?? "?"} · first_seen=${s.alert_first_seen_unknown} · llm=${s.alert_llm_traffic} · fanout≥${s.high_fanout_threshold ?? "—"} · denylist=${s.alert_destination_denylist} · cidr=${s.alert_cidr_match} · ports=${(r.suspicious_ports || []).length} · custom=${(r.custom_rules || []).length}`;
     $("rules-allow").innerHTML =
       (r.process_allowlist || []).map((p) => `<li>${esc(p)}</li>`).join("") ||
       "<li class='muted'>(none)</li>";
     $("rules-watch").innerHTML =
       (r.process_watchlist || []).map((p) => `<li>${esc(p)}</li>`).join("") ||
       "<li class='muted'>(none)</li>";
+    $("rules-dest-allow").innerHTML =
+      (r.destination_allowlist || []).map((p) => `<li><code>${esc(p)}</code></li>`).join("") ||
+      "<li class='muted'>(none)</li>";
+    $("rules-dest-deny").innerHTML =
+      (r.destination_denylist || []).map((p) => `<li><code>${esc(p)}</code></li>`).join("") ||
+      "<li class='muted'>(none)</li>";
+    $("rules-cidr").innerHTML =
+      (r.cidr_rules || [])
+        .map(
+          (c) =>
+            `<li><code>${esc(c.cidr)}</code> → ${esc(c.action)} / ${esc(c.severity)}${
+              c.note ? " — " + esc(c.note) : ""
+            }</li>`
+        )
+        .join("") || "<li class='muted'>(none)</li>";
+    $("rules-custom").innerHTML =
+      (r.custom_rules || [])
+        .map(
+          (c) =>
+            `<li><strong>${esc(c.id)}</strong> ${esc(c.action)}/${esc(c.severity)}${
+              c.message ? " — " + esc(c.message) : ""
+            }</li>`
+        )
+        .join("") || "<li class='muted'>(none)</li>";
     $("rules-ports").textContent = (r.suspicious_ports || []).join(", ") || "(none)";
   }
 
