@@ -1,5 +1,5 @@
-use notify_rust::Notification;
 use crate::models::{ThreatAlert, ThreatSeverity, ThreatType};
+use notify_rust::Notification;
 
 /// Helper methods for ThreatAlert notification strings
 fn threat_severity_string(severity: &ThreatSeverity) -> String {
@@ -19,6 +19,7 @@ fn threat_type_string(threat_type: &ThreatType) -> String {
         ThreatType::RogueAccessPoint => "Rogue Access Point".to_string(),
         ThreatType::TrafficAnomaly => "Traffic Anomaly".to_string(),
         ThreatType::ConnectionIssue => "Connection Issue".to_string(),
+        ThreatType::Policy => "Policy".to_string(),
     }
 }
 
@@ -34,24 +35,28 @@ impl NotificationManager {
             ThreatSeverity::Medium => "dialog-question",
             ThreatSeverity::Low => "dialog-information",
         };
-        
-        let title = format!("🚨 {} - {}", threat_severity_string(&threat.severity), threat_type_string(&threat.threat_type));
-        
+
+        let title = format!(
+            "🚨 {} - {}",
+            threat_severity_string(&threat.severity),
+            threat_type_string(&threat.threat_type)
+        );
+
         let body = if let Some(ip) = threat.ip {
             format!("IP: {}\n{}", ip, threat.description)
         } else {
             threat.description.clone()
         };
-        
+
         Notification::new()
             .summary(&title)
             .body(&body)
             .icon(severity_icon)
             .show()?;
-        
+
         Ok(())
     }
-    
+
     /// Send info notification
     pub fn notify_info(title: &str, message: &str) -> Result<(), Box<dyn std::error::Error>> {
         Notification::new()
@@ -59,10 +64,10 @@ impl NotificationManager {
             .body(message)
             .icon("dialog-information")
             .show()?;
-        
+
         Ok(())
     }
-    
+
     /// Send success notification
     pub fn notify_success(title: &str, message: &str) -> Result<(), Box<dyn std::error::Error>> {
         Notification::new()
@@ -70,10 +75,10 @@ impl NotificationManager {
             .body(message)
             .icon("emblem-ok-symbolic")
             .show()?;
-        
+
         Ok(())
     }
-    
+
     /// Send error notification
     pub fn notify_error(title: &str, message: &str) -> Result<(), Box<dyn std::error::Error>> {
         Notification::new()
@@ -81,7 +86,7 @@ impl NotificationManager {
             .body(message)
             .icon("dialog-error")
             .show()?;
-        
+
         Ok(())
     }
 }
@@ -89,7 +94,7 @@ impl NotificationManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_notification_strings() {
         // Test that notification strings are generated without panic

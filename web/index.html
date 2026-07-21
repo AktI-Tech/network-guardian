@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NetworkGuardian</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="shield">🛡️</span>
+      <div>
+        <h1>NetworkGuardian</h1>
+        <p class="motto">Protecting the builders</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="env-pills" id="env-pills"></div>
+      <div class="status" id="status-pill">connecting…</div>
+    </div>
+  </header>
+
+  <section class="cards" id="cards">
+    <div class="card"><div class="label">Active connections</div><div class="value" id="c-conn">—</div></div>
+    <div class="card"><div class="label">Alerts</div><div class="value" id="c-alerts">—</div></div>
+    <div class="card"><div class="label">LLM flows</div><div class="value" id="c-llm">—</div></div>
+    <div class="card"><div class="label">Uptime</div><div class="value" id="c-up">—</div></div>
+  </section>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="connections">Connections</button>
+    <button class="tab" data-tab="destinations">Destinations</button>
+    <button class="tab" data-tab="alerts">Alerts</button>
+  </nav>
+
+  <main>
+    <section id="panel-connections" class="panel active">
+      <div class="toolbar">
+        <input type="search" id="filter" placeholder="Filter process, IP, host, stack…" />
+        <label class="chk"><input type="checkbox" id="llm-only" /> LLM only</label>
+        <label class="chk"><input type="checkbox" id="stack-only" /> WSL/Docker/LLM stack</label>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Process</th>
+              <th>PID</th>
+              <th>Remote</th>
+              <th>Host</th>
+              <th>Port</th>
+              <th>Category</th>
+              <th>Stack</th>
+              <th>Label</th>
+              <th>State</th>
+            </tr>
+          </thead>
+          <tbody id="conn-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="panel-destinations" class="panel">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Host / IP</th>
+              <th>Category</th>
+              <th>Label</th>
+              <th>Hits</th>
+              <th>Last seen</th>
+            </tr>
+          </thead>
+          <tbody id="dest-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="panel-alerts" class="panel">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Severity</th>
+              <th>Type</th>
+              <th>Description</th>
+              <th>IP</th>
+              <th>When</th>
+            </tr>
+          </thead>
+          <tbody id="alert-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Local-only · 127.0.0.1 · AktI-Tech</span>
+    <span id="footer-meta"></span>
+  </footer>
+  <script src="/app.js"></script>
+</body>
+</html>

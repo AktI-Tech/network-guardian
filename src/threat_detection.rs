@@ -1,13 +1,13 @@
-use crate::models::{ThreatAlert, ThreatType, ThreatSeverity};
+use crate::models::{ThreatAlert, ThreatSeverity, ThreatType};
 use crate::packet_capture::PacketInfo;
 use std::collections::HashMap;
 use std::net::IpAddr;
 
 pub struct ThreatDetector {
-    arp_table: HashMap<IpAddr, String>, // IP -> MAC mapping
+    arp_table: HashMap<IpAddr, String>,
     baseline_traffic: TrafficBaseline,
     dns_cache: DnsCache,
-    suspicious_port_connections: HashMap<u16, usize>, // port -> count
+    suspicious_port_connections: HashMap<u16, usize>,
     packet_count: usize,
 }
 
@@ -37,84 +37,55 @@ impl ThreatDetector {
             packet_count: 0,
         }
     }
-    
-    /// Analyze a packet for threats - main entry point for real packets
+
+    /// Analyze a packet for threats — main entry for capture path.
+    /// Does not emit volume-spam every N packets; host sampler handles first-seen.
     pub fn analyze_packet(&mut self, packet: &PacketInfo) -> Option<ThreatAlert> {
         self.packet_count += 1;
-        
-        // For now, just track high packet volume as a potential threat signal
-        if self.packet_count % 100 == 0 {
-            return Some(ThreatAlert {
-                threat_type: ThreatType::TrafficAnomaly,
-                severity: ThreatSeverity::Low,
-                ip: packet.src_ip,
-                description: format!(
-                    "High packet volume detected: {} packets captured so far",
-                    self.packet_count
-                ),
-                timestamp: chrono::Local::now(),
-            });
-        }
-        
-        // Check for suspicious port access if we have port information
+
         if let Some(dst_port) = packet.dst_port {
             if self.is_suspicious_port(dst_port) {
-                let count = self.suspicious_port_connections.entry(dst_port).or_insert(0);
+                let count = self
+                    .suspicious_port_connections
+                    .entry(dst_port)
+                    .or_insert(0);
                 *count += 1;
-                
-                if *count > 3 {  // Alert after 3 attempts
+
+                if *count == 4 {
                     return Some(ThreatAlert {
                         threat_type: ThreatType::TrafficAnomaly,
                         severity: ThreatSeverity::High,
                         ip: packet.dst_ip,
                         description: format!(
-                            "Suspicious port access detected: {} accessing port {} ({} times)",
-                            packet.src_ip.unwrap_or_else(|| "Unknown".parse().unwrap()),
-                            dst_port,
-                            count
+                            "Suspicious port access detected: {:?} → port {} ({} times)",
+                            packet.src_ip, dst_port, count
                         ),
                         timestamp: chrono::Local::now(),
                     });
                 }
             }
         }
-        
-        // Check for traffic anomalies (unusually large packets)
-        if packet.length > 65000 {  // Jumbo packet or fragmented attack
+
+        if packet.length > 65000 {
             return Some(ThreatAlert {
                 threat_type: ThreatType::TrafficAnomaly,
                 severity: ThreatSeverity::Medium,
                 ip: packet.src_ip,
-                description: format!(
-                    "Abnormally large packet detected: {} bytes",
-                    packet.length
-                ),
+                description: format!("Abnormally large packet detected: {} bytes", packet.length),
                 timestamp: chrono::Local::now(),
             });
         }
-        
+
         None
     }
-    
+
     fn is_suspicious_port(&self, port: u16) -> bool {
-        // Common ports used for attacks/exploitation
-        matches!(port, 
-            21 |    // FTP
-            23 |    // Telnet
-            69 |    // TFTP
-            135 |   // RPC Endpoint Mapper
-            139 |   // NetBIOS
-            445 |   // SMB
-            3389 |  // RDP
-            4444 |  // Trojan
-            5555 |  // Oracle
-            8888 |  // Alternative HTTP
-            9999 |  // Issa
-            9050    // SOCKS proxy
+        matches!(
+            port,
+            21 | 23 | 69 | 135 | 139 | 445 | 3389 | 4444 | 5555 | 8888 | 9999 | 9050
         )
     }
-    
-    /// Detect ARP spoofing by monitoring IP-MAC mappings
+
     pub fn detect_arp_spoofing(&mut self, ip: IpAddr, mac: String) -> Option<ThreatAlert> {
         if let Some(known_mac) = self.arp_table.get(&ip) {
             if known_mac != &mac {
@@ -132,20 +103,18 @@ impl ThreatDetector {
         } else {
             self.arp_table.insert(ip, mac);
         }
-        
+
         None
     }
-    
-    /// Detect DNS spoofing by validating responses
-    pub fn detect_dns_spoofing(
-        &mut self,
-        domain: &str,
-        ip: IpAddr,
-    ) -> Option<ThreatAlert> {
-        let entry = self.dns_cache.responses.entry(domain.to_string()).or_default();
-        
+
+    pub fn detect_dns_spoofing(&mut self, domain: &str, ip: IpAddr) -> Option<ThreatAlert> {
+        let entry = self
+            .dns_cache
+            .responses
+            .entry(domain.to_string())
+            .or_default();
+
         if !entry.is_empty() && !entry.contains(&ip) {
-            // Different IP for same domain - potential spoofing
             return Some(ThreatAlert {
                 threat_type: ThreatType::DnsSpoofing,
                 severity: ThreatSeverity::High,
@@ -157,17 +126,15 @@ impl ThreatDetector {
                 timestamp: chrono::Local::now(),
             });
         }
-        
+
         if !entry.contains(&ip) {
             entry.push(ip);
         }
-        
+
         None
     }
-    
-    /// Detect MITM attacks by monitoring SSL/TLS certificate mismatches
+
     pub fn detect_mitm(&self, host: &str, cert_issuer: &str) -> Option<ThreatAlert> {
-        // Simplified check - in production, validate against certificate pinning/TOFU
         if cert_issuer.contains("FAKE") || cert_issuer.contains("UNKNOWN") {
             return Some(ThreatAlert {
                 threat_type: ThreatType::MitmAttack,
@@ -180,71 +147,71 @@ impl ThreatDetector {
                 timestamp: chrono::Local::now(),
             });
         }
-        
+
         None
     }
-    
-    /// Detect rogue wireless access points
-    pub fn detect_rogue_ap(&self, ssid: &str, mac: &str, signal_strength: i32) -> Option<ThreatAlert> {
-        // Check for known malicious SSIDs or suspicious characteristics
-        if ssid.contains("FREE_WIFI") || ssid.contains("GUEST_NETWORK") || ssid.is_empty() {
-            if signal_strength > -30 { // Suspiciously strong signal
-                return Some(ThreatAlert {
-                    threat_type: ThreatType::RogueAccessPoint,
-                    severity: ThreatSeverity::High,
-                    ip: None,
-                    description: format!(
-                        "Suspicious access point detected: SSID='{}', MAC={}, Signal={}dBm",
-                        ssid, mac, signal_strength
-                    ),
-                    timestamp: chrono::Local::now(),
-                });
-            }
+
+    pub fn detect_rogue_ap(
+        &self,
+        ssid: &str,
+        mac: &str,
+        signal_strength: i32,
+    ) -> Option<ThreatAlert> {
+        if (ssid.contains("FREE_WIFI") || ssid.contains("GUEST_NETWORK") || ssid.is_empty())
+            && signal_strength > -30
+        {
+            return Some(ThreatAlert {
+                threat_type: ThreatType::RogueAccessPoint,
+                severity: ThreatSeverity::High,
+                ip: None,
+                description: format!(
+                    "Suspicious access point detected: SSID='{}', MAC={}, Signal={}dBm",
+                    ssid, mac, signal_strength
+                ),
+                timestamp: chrono::Local::now(),
+            });
         }
-        
+
         None
     }
-    
-    /// Detect traffic anomalies using baseline analysis
+
     pub fn detect_traffic_anomaly(
         &mut self,
         current_pps: f64,
         current_bps: f64,
     ) -> Option<ThreatAlert> {
-        self.baseline_traffic.packets_per_second =
-            (self.baseline_traffic.packets_per_second * self.baseline_traffic.sample_count as f64
-                + current_pps)
-                / (self.baseline_traffic.sample_count as f64 + 1.0);
-        self.baseline_traffic.bytes_per_second =
-            (self.baseline_traffic.bytes_per_second * self.baseline_traffic.sample_count as f64
-                + current_bps)
-                / (self.baseline_traffic.sample_count as f64 + 1.0);
+        self.baseline_traffic.packets_per_second = (self.baseline_traffic.packets_per_second
+            * self.baseline_traffic.sample_count as f64
+            + current_pps)
+            / (self.baseline_traffic.sample_count as f64 + 1.0);
+        self.baseline_traffic.bytes_per_second = (self.baseline_traffic.bytes_per_second
+            * self.baseline_traffic.sample_count as f64
+            + current_bps)
+            / (self.baseline_traffic.sample_count as f64 + 1.0);
         self.baseline_traffic.sample_count += 1;
-        
-        // Detect if traffic is 5x baseline (potential DDoS or data exfiltration)
-        if self.baseline_traffic.sample_count > 10 {
-            if current_pps > self.baseline_traffic.packets_per_second * 5.0
-                || current_bps > self.baseline_traffic.bytes_per_second * 5.0
-            {
-                return Some(ThreatAlert {
-                    threat_type: ThreatType::TrafficAnomaly,
-                    severity: ThreatSeverity::Medium,
-                    ip: None,
-                    description: format!(
-                        "Traffic anomaly detected! Current: {:.0} pps, {:.0} bps. Baseline: {:.0} pps, {:.0} bps",
-                        current_pps, current_bps,
-                        self.baseline_traffic.packets_per_second,
-                        self.baseline_traffic.bytes_per_second
-                    ),
-                    timestamp: chrono::Local::now(),
-                });
-            }
+
+        if self.baseline_traffic.sample_count > 10
+            && (current_pps > self.baseline_traffic.packets_per_second * 5.0
+                || current_bps > self.baseline_traffic.bytes_per_second * 5.0)
+        {
+            return Some(ThreatAlert {
+                threat_type: ThreatType::TrafficAnomaly,
+                severity: ThreatSeverity::Medium,
+                ip: None,
+                description: format!(
+                    "Traffic anomaly detected! Current: {:.0} pps, {:.0} bps. Baseline: {:.0} pps, {:.0} bps",
+                    current_pps,
+                    current_bps,
+                    self.baseline_traffic.packets_per_second,
+                    self.baseline_traffic.bytes_per_second
+                ),
+                timestamp: chrono::Local::now(),
+            });
         }
-        
+
         None
     }
-    
-    /// Detect connection quality issues
+
     pub fn detect_connection_issues(
         &self,
         latency_ms: f64,
@@ -256,7 +223,7 @@ impl ThreatDetector {
             } else {
                 ThreatSeverity::Medium
             };
-            
+
             return Some(ThreatAlert {
                 threat_type: ThreatType::ConnectionIssue,
                 severity,
@@ -268,7 +235,13 @@ impl ThreatDetector {
                 timestamp: chrono::Local::now(),
             });
         }
-        
+
         None
+    }
+}
+
+impl Default for ThreatDetector {
+    fn default() -> Self {
+        Self::new()
     }
 }
