@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "region_code": "NP",
+  "scope": "south_asia",
+  "status": "watch",
+  "summary": "Sample OSINT-style snapshot for builders in Nepal / South Asia. Not an official CERT advisory — replace with live feeds (R2+) or AktI-Tech curated pack. Use for dashboard perspective and local IoC correlation only.",
+  "generated_at": "2026-07-21T00:00:00+00:00",
+  "industries": [
+    {
+      "name": "Finance / Banking",
+      "score": 72,
+      "rationale": "Regional phishing and credential-theft campaigns frequently target banks and payment apps across South Asia."
+    },
+    {
+      "name": "Government / NGO",
+      "score": 65,
+      "rationale": "Spear-phishing and document malware remain common against public sector and aid organizations."
+    },
+    {
+      "name": "Telecom",
+      "score": 48,
+      "rationale": "Subscriber fraud and SMS-related social engineering remain elevated in the wider region."
+    },
+    {
+      "name": "Builders / Tech",
+      "score": 55,
+      "rationale": "Supply-chain and developer-tooling abuse (npm/PyPI, CI tokens) is a global pattern affecting startups and freelancers in NP/SA."
+    },
+    {
+      "name": "Healthcare",
+      "score": 40,
+      "rationale": "Ransomware and data extortion remain a sector risk; volume lower than finance in open reporting."
+    }
+  ],
+  "campaigns": [
+    {
+      "id": "sample-sa-phishing-finance-2026",
+      "title": "South Asia banking credential phishing (sample)",
+      "severity": "elevated",
+      "countries": ["NP", "IN", "BD", "LK"],
+      "sectors": ["Finance / Banking"],
+      "summary": "Illustrative campaign: fake bank login pages and SMS lures. Correlate with browser processes hitting unknown remotes.",
+      "source_name": "NetworkGuardian sample pack",
+      "source_url": "https://github.com/AktI-Tech/network-guardian",
+      "confidence": "low"
+    },
+    {
+      "id": "sample-dev-supply-chain",
+      "title": "Malicious package / typosquat targeting developers (sample)",
+      "severity": "watch",
+      "countries": ["SA"],
+      "sectors": ["Builders / Tech"],
+      "summary": "Illustrative risk: typosquat packages and post-install beacons. Watch python/node/npm on first-seen unknown destinations.",
+      "source_name": "NetworkGuardian sample pack",
+      "source_url": "https://github.com/AktI-Tech/network-guardian",
+      "confidence": "low"
+    },
+    {
+      "id": "sample-gov-doc-malware",
+      "title": "Malicious office docs aimed at gov/NGO staff (sample)",
+      "severity": "watch",
+      "countries": ["NP", "IN"],
+      "sectors": ["Government / NGO"],
+      "summary": "Illustrative: macro-enabled documents. Local exposure is low unless office apps call unexpected hosts.",
+      "source_name": "NetworkGuardian sample pack",
+      "source_url": "https://github.com/AktI-Tech/network-guardian",
+      "confidence": "low"
+    }
+  ],
+  "iocs": [
+    {
+      "ioc_type": "ip",
+      "value": "185.220.101.1",
+      "tags": ["tor", "sample", "scanner"],
+      "source": "sample-pack",
+      "notes": "Well-known Tor exit sample IP for correlation demos — not Nepal-specific."
+    },
+    {
+      "ioc_type": "ip",
+      "value": "45.33.32.156",
+      "tags": ["sample", "scan"],
+      "source": "sample-pack",
+      "notes": "Example public host often used in labs; included for matching demos."
+    },
+    {
+      "ioc_type": "domain",
+      "value": "malware-traffic-analysis.net",
+      "tags": ["sample", "training"],
+      "source": "sample-pack",
+      "notes": "Training site domain — if seen, likely research not infection."
+    },
+    {
+      "ioc_type": "domain",
+      "value": "evil-phish-bank-sa.example",
+      "tags": ["phishing", "finance", "sample"],
+      "source": "sample-pack",
+      "notes": "Fictional domain for future feed demos (will not match real traffic)."
+    },
+    {
+      "ioc_type": "ip",
+      "value": "1.1.1.1",
+      "tags": ["cdn", "benign-example"],
+      "source": "sample-pack",
+      "notes": "Cloudflare DNS — listed only to exercise correlator; treat matches as low concern."
+    }
+  ],
+  "sources": [
+    {
+      "name": "Embedded sample pack (R1)",
+      "url": "intel/np_sa_sample.json",
+      "kind": "local_sample",
+      "note": "Static snapshot for UI/correlation until live feeds (R2) ship."
+    },
+    {
+      "name": "CERT-In (India) — link only",
+      "url": "https://www.cert-in.org.in/",
+      "kind": "cert_link",
+      "note": "Authoritative regional advisories; not auto-ingested in R1."
+    }
+  ]
+}

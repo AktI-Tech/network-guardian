@@ -8,6 +8,7 @@ mod models;
 mod network_monitor;
 mod notifications;
 mod packet_capture;
+mod region;
 mod rules;
 mod sensors;
 mod suricata;
@@ -49,6 +50,7 @@ enum Command {
     Connections,
     Stack,
     Rules,
+    Region,
     Stats,
     Recent(u32),
     Severity(String),
@@ -99,6 +101,7 @@ async fn main() {
         Command::Connections => print_connections_once(),
         Command::Stack => print_stack(),
         Command::Rules => print_rules(),
+        Command::Region => print_region(Some(&db)),
         Command::Stats => print_stats(&db),
         Command::Recent(limit) => print_recent(&db, limit),
         Command::Severity(level) => print_by_severity(&db, &level),
@@ -122,6 +125,7 @@ fn parse_command(args: Vec<String>) -> Result<Command, String> {
         "mcp" => Ok(Command::Mcp),
         "stack" => Ok(Command::Stack),
         "rules" => Ok(Command::Rules),
+        "region" => Ok(Command::Region),
         "serve" => {
             let mut bind = DEFAULT_BIND.to_string();
             let mut sample_secs = DEFAULT_SAMPLE_SECS;
@@ -383,6 +387,55 @@ async fn run_eve_ingest(db: Arc<ThreatDatabase>, path: PathBuf, events: broadcas
             }
         }
         tokio::time::sleep(interval).await;
+    }
+}
+
+fn print_region(db: Option<&ThreatDatabase>) {
+    let rules = RuleConfig::load(None);
+    let snap = crate::region::snapshot_with_local(db, &rules.process_watchlist);
+    println!("🌏 Regional threat radar");
+    println!("   Region: {}  Scope: {}", snap.region_code, snap.scope);
+    println!(
+        "   Status: {}  Enabled: {}",
+        snap.status.to_uppercase(),
+        snap.enabled
+    );
+    println!("   Sample pack: {}", snap.is_sample);
+    println!("\n{}", snap.summary);
+    println!("\nDisclaimer: {}", snap.disclaimer);
+    if !snap.industries.is_empty() {
+        println!("\nIndustry heat:");
+        for i in &snap.industries {
+            println!("   [{:>3}] {:<20} {}", i.score, i.name, i.rationale);
+        }
+    }
+    if !snap.campaigns.is_empty() {
+        println!("\nCampaigns:");
+        for c in &snap.campaigns {
+            println!(
+                "   • {} [{}] countries={:?} sectors={:?}",
+                c.title, c.severity, c.countries, c.sectors
+            );
+            println!("     {}", c.summary);
+        }
+    }
+    let exp = &snap.local_exposure;
+    println!("\nLocal exposure: {}", exp.level.to_uppercase());
+    println!(
+        "   live_ioc_hits={}  dest_hits={}  watchlist_active={}",
+        exp.matched_live, exp.matched_destinations, exp.watchlist_active
+    );
+    for n in &exp.notes {
+        println!("   · {}", n);
+    }
+    if !exp.matches.is_empty() {
+        println!("\nMatches:");
+        for m in exp.matches.iter().take(20) {
+            println!(
+                "   {} {} via {} proc={:?}",
+                m.ioc_type, m.value, m.matched_as, m.process_name
+            );
+        }
     }
 }
 
@@ -745,6 +798,7 @@ fn print_usage() {
     println!("  connections                 One-shot process → destination table");
     println!("  stack                       WSL distros, Docker containers, adapter tags");
     println!("  rules                       Show loaded YAML policy (allow/watch/fan-out)");
+    println!("  region                      Nepal/South Asia threat radar + local exposure");
     println!("  monitor                     Live packet monitor (needs --features packet-capture)");
     println!("  stats                       Show threat + connection summary");
     println!("  recent [limit]              Show recent alerts");

@@ -47,6 +47,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/stats", get(api_stats))
         .route("/api/environment", get(api_environment))
         .route("/api/rules", get(api_rules))
+        .route("/api/region", get(api_region))
         .route("/api/events", get(api_events))
         .with_state(state)
 }
@@ -113,6 +114,12 @@ async fn api_environment() -> impl IntoResponse {
 
 async fn api_rules(State(state): State<AppState>) -> impl IntoResponse {
     Json((*state.rules).clone())
+}
+
+async fn api_region(State(state): State<AppState>) -> impl IntoResponse {
+    let snap =
+        crate::region::snapshot_with_local(Some(state.db.as_ref()), &state.rules.process_watchlist);
+    Json(snap)
 }
 
 async fn api_connections(State(state): State<AppState>) -> impl IntoResponse {

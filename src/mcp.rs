@@ -141,6 +141,11 @@ fn tool_defs() -> Value {
             "name": "list_rules",
             "description": "Show active YAML policy: allowlist, watchlist, fan-out threshold, ports.",
             "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "regional_threat_summary",
+            "description": "Nepal/South Asia threat radar snapshot plus local IoC exposure on this PC.",
+            "inputSchema": { "type": "object", "properties": {} }
         }
     ])
 }
@@ -176,6 +181,11 @@ fn call_tool(name: &str, args: &Value, db: &ThreatDatabase) -> Result<Value, Str
         "list_rules" => {
             let cfg = crate::rules::RuleConfig::load(None);
             Ok(tool_text(serde_json::to_value(cfg).unwrap_or(json!({}))))
+        }
+        "regional_threat_summary" => {
+            let rules = crate::rules::RuleConfig::load(None);
+            let snap = crate::region::snapshot_with_local(Some(db), &rules.process_watchlist);
+            Ok(tool_text(serde_json::to_value(snap).unwrap_or(json!({}))))
         }
         "list_active_connections" => {
             let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
