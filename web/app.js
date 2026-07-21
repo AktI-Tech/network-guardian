@@ -4,6 +4,7 @@
   let destinations = [];
   let alerts = [];
   let stackEnv = null;
+  let rulesCfg = null;
 
   document.querySelectorAll(".tab").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -214,20 +215,40 @@
     return `${s}s`;
   }
 
+  function renderRules() {
+    const r = rulesCfg;
+    if (!r) {
+      $("rules-summary").textContent = "Policy not loaded";
+      return;
+    }
+    const s = r.settings || {};
+    $("rules-summary").textContent =
+      `v${r.version ?? "?"} · first_seen_unknown=${s.alert_first_seen_unknown} · llm_traffic=${s.alert_llm_traffic} · fanout≥${s.high_fanout_threshold ?? "—"} · ports=${(r.suspicious_ports || []).length}`;
+    $("rules-allow").innerHTML =
+      (r.process_allowlist || []).map((p) => `<li>${esc(p)}</li>`).join("") ||
+      "<li class='muted'>(none)</li>";
+    $("rules-watch").innerHTML =
+      (r.process_watchlist || []).map((p) => `<li>${esc(p)}</li>`).join("") ||
+      "<li class='muted'>(none)</li>";
+    $("rules-ports").textContent = (r.suspicious_ports || []).join(", ") || "(none)";
+  }
+
   async function refresh() {
     try {
-      const [status, conn, dest, al, env] = await Promise.all([
+      const [status, conn, dest, al, env, rules] = await Promise.all([
         fetch("/api/status").then((r) => r.json()),
         fetch("/api/connections").then((r) => r.json()),
         fetch("/api/destinations").then((r) => r.json()),
         fetch("/api/alerts").then((r) => r.json()),
         fetch("/api/environment").then((r) => r.json()).catch(() => null),
+        fetch("/api/rules").then((r) => r.json()).catch(() => null),
       ]);
 
       connections = conn.connections || [];
       destinations = dest.destinations || [];
       alerts = al.alerts || [];
       stackEnv = env;
+      rulesCfg = rules;
 
       $("c-conn").textContent = String(status.connection_count ?? connections.length);
       $("c-alerts").textContent = String(status.alert_count ?? alerts.length);
@@ -241,6 +262,7 @@
       renderStack();
       renderDestinations();
       renderAlerts();
+      renderRules();
     } catch (e) {
       $("status-pill").textContent = "offline";
       $("status-pill").classList.remove("live");

@@ -1,8 +1,15 @@
-# NetworkGuardian default policy rules (Protecting the builders)
-version: 1
+# NetworkGuardian default policy (Protecting the builders)
+# Edit this file and restart `serve` to apply.
+version: 2
+
 settings:
+  # First connection to an unknown public host → policy alert
   alert_first_seen_unknown: true
+  # First connection to an LLM-classified destination → low alert
   alert_llm_traffic: true
+  # Unique remote IPs per process in one sample above this → fan-out alert (0 = off)
+  high_fanout_threshold: 25
+
 suspicious_ports:
   - 21
   - 23
@@ -15,3 +22,43 @@ suspicious_ports:
   - 5555
   - 6667
   - 31337
+
+# Substring match on process name (case-insensitive).
+# First-seen unknown from these is suppressed (noisy system / browsers).
+process_allowlist:
+  - svchost
+  - SearchHost
+  - System
+  - Idle
+  - msedgewebview
+  - NVIDIA
+  - nvcontainer
+  - WindowsSecurityHealth
+  - SecurityHealthService
+
+# Extra scrutiny: first-seen unknown → High severity
+process_watchlist:
+  - python
+  - node
+  - powershell
+  - pwsh
+  - cmd.exe
+  - curl
+  - wget
+  - bash
+  - sh.exe
+  - wsl
+  - ruby
+  - perl
+  - php
+  - java
+  - cargo
+  - go.exe
+  - npm
+  - yarn
+  - pnpm
+  - pip
+  - uv.exe
+
+# Optional: only alert LLM first-seen when process matches (empty = any process)
+llm_process_filter: []
