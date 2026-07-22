@@ -42,8 +42,9 @@ network_guardian autostart enable     # Windows: start at logon (serve --tray)
 network_guardian autostart status
 network_guardian connections          # one-shot process → dest table
 network_guardian stack                # WSL + Docker (containers, networks, host-port exposure)
-network_guardian rules                # show YAML policy (allow/watch/fan-out)
+network_guardian rules                # show YAML policy (v3 allow/deny/CIDR/custom)
 network_guardian region               # Nepal/South Asia radar + local IoC exposure
+network_guardian region refresh       # force opt-in live feed pull (HTTP GET only)
 network_guardian mcp                  # MCP stdio server for IDE agents
 network_guardian stats
 network_guardian recent 20
@@ -86,8 +87,8 @@ Tools (read-only): `security_summary`, `list_active_connections`, `list_alerts`,
 - **Docker host-port exposure**: parse published ports (`0.0.0.0` / LAN / localhost), compose project labels, engine version
 - **Reverse DNS** (cached) so CDN IPs can map to known hosts / labels
 - **Stack hints**: `wsl`, `docker`, `llm-local` from process names + env probe
-- **YAML rules** (`rules/default.yml`): first-seen, allow/watch lists, high fan-out, ports
-- **Regional radar** (Nepal / South Asia sample pack): industry heat, campaigns, local IoC exposure
+- **YAML rules v3** (`rules/default.yml`): first-seen, process allow/watch, destination allow/deny, CIDR, custom match rules, fan-out, ports
+- **Regional radar** (Nepal / South Asia): sample pack + **opt-in live feeds** (pull-only HTTP, disk cache) + local IoC exposure
 - **Windows tray + autostart**: `serve --tray`, `autostart enable|disable|status` (HKCU Run)
 - **MCP stdio server** for coding agents
 - **SSE** live ticks (`/api/events`) + dashboard
@@ -100,8 +101,8 @@ Tools (read-only): `security_summary`, `list_active_connections`, `list_alerts`,
 
 | Phase | Focus |
 |-------|--------|
-| Now | Local dashboard + rules + MCP + Docker exposure |
-| Next | Live regional feeds, richer rule language |
+| Now | Dashboard + rules v3 + MCP + Docker exposure + opt-in feeds |
+| Next | Curated AktI-Tech packs (R5), headless tray polish |
 | Later | Mobile companion, Microsoft new-device / ARM64 clients |
 
 ## Project layout

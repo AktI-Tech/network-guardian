@@ -45,3 +45,7 @@ __pycache__/
 # Draft notes under docs/ (Pages HTML/CSS/JS are tracked)
 /docs/**/*.md
 /docs/**/*.draft.*
+
+# Regional feed cache (downloaded OSINT — never upload local data)
+intel/cache/
+

@@ -188,6 +188,13 @@
             </div>
             <p class="stack-notes" id="region-notes"></p>
             <p class="stack-notes" id="region-sources"></p>
+            <h3 style="margin-top:1rem">Live feed pulls</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Name</th><th>Status</th><th>IoCs</th><th>Detail</th></tr></thead>
+                <tbody id="region-feeds"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -205,10 +212,26 @@
             <h3>Process watchlist</h3>
             <ul class="rules-list" id="rules-watch"></ul>
           </div>
+          <div class="stack-block">
+            <h3>Destination allowlist</h3>
+            <ul class="rules-list" id="rules-dest-allow"></ul>
+          </div>
+          <div class="stack-block">
+            <h3>Destination denylist</h3>
+            <ul class="rules-list" id="rules-dest-deny"></ul>
+          </div>
+          <div class="stack-block full">
+            <h3>CIDR rules</h3>
+            <ul class="rules-list" id="rules-cidr"></ul>
+          </div>
+          <div class="stack-block full">
+            <h3>Custom rules</h3>
+            <ul class="rules-list" id="rules-custom"></ul>
+          </div>
           <div class="stack-block full">
             <h3>Suspicious ports</h3>
             <p id="rules-ports" class="stack-notes"></p>
-            <p class="stack-notes">Edit <code>rules/default.yml</code> and restart <code>serve</code> to apply.</p>
+            <p class="stack-notes">Edit <code>rules/default.yml</code> and restart <code>serve</code> to apply. v3: dest allow/deny, CIDR, custom match rules.</p>
           </div>
         </div>
       </div>
