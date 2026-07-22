@@ -343,10 +343,10 @@ async fn run_serve(
         None
     };
 
-    let dashboard_url = format!("http://{}/", addr);
     #[cfg(windows)]
     let tray_rx = if tray {
-        Some(tray::spawn(dashboard_url.clone()))
+        let dashboard_url = format!("http://{}/", addr);
+        Some(tray::spawn(dashboard_url))
     } else {
         None
     };
