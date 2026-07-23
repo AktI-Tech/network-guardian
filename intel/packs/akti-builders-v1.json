@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "pack_id": "akti-builders-v1",
+  "pack_name": "AktI-Tech Builders (NP / South Asia)",
+  "pack_version": "1.0.0",
+  "curator": "AktI-Tech",
+  "kind": "curated",
+  "region_code": "NP",
+  "scope": "south_asia",
+  "status": "watch",
+  "summary": "Curated AktI-Tech pack for builders on Windows + WSL2 + Docker + local LLMs in Nepal / South Asia. Focuses on developer supply-chain, credential theft, and outbound C2-shaped traffic patterns. Local-only; not an official CERT feed.",
+  "generated_at": "2026-07-22T00:00:00+00:00",
+  "industries": [
+    {
+      "name": "Builders / Tech",
+      "score": 78,
+      "rationale": "Primary audience: freelancers, startups, and remote engineers. Typosquat packages, CI token theft, and IDE/agent tool abuse are the daily risk surface."
+    },
+    {
+      "name": "Finance / Banking",
+      "score": 68,
+      "rationale": "Regional phishing remains elevated; builders handling fintech or payroll integrations share the blast radius."
+    },
+    {
+      "name": "Government / NGO",
+      "score": 52,
+      "rationale": "Document malware and credential phishing still common; lower direct builder exposure unless contracting in-sector."
+    },
+    {
+      "name": "Telecom",
+      "score": 42,
+      "rationale": "SMS social engineering and SIM-related fraud remain regional themes; watch SMS gateways from unexpected processes."
+    },
+    {
+      "name": "Healthcare",
+      "score": 38,
+      "rationale": "Ransomware risk is sector-wide; lower volume of open reporting targeted at solo builders."
+    }
+  ],
+  "campaigns": [
+    {
+      "id": "akti-dev-typosquat-2026",
+      "title": "Developer package typosquats & post-install beacons",
+      "severity": "elevated",
+      "countries": ["NP", "IN", "BD", "LK", "SA"],
+      "sectors": ["Builders / Tech"],
+      "summary": "Malicious or typosquat npm/PyPI/Cargo crates that phone home after install. Correlate python/node/cargo/npm to first-seen raw IPs and unknown domains.",
+      "source_name": "AktI-Tech curated pack",
+      "source_url": "https://github.com/AktI-Tech/network-guardian",
+      "confidence": "medium"
+    },
+    {
+      "id": "akti-ci-token-exfil",
+      "title": "CI / cloud credential exfiltration patterns",
+      "severity": "elevated",
+      "countries": ["SA", "NP"],
+      "sectors": ["Builders / Tech"],
+      "summary": "Stolen GitHub/GitLab/npm tokens used from unexpected processes. Watch git, gh, glab, node, python hitting unusual hosts shortly after first-seen destinations.",
+      "source_name": "AktI-Tech curated pack",
+      "source_url": "https://github.com/AktI-Tech/network-guardian",
+      "confidence": "medium"
+    },
+    {
+      "id": "akti-llm-tool-pivot",
+      "title": "Local agent / LLM tool unexpected egress",
+      "severity": "watch",
+      "countries": ["SA"],
+      "sectors": ["Builders / Tech"],
+      "summary": "Coding agents and local model front-ends may call tool hosts not on your mental allowlist. NetworkGuardian already classifies many LLM destinations; this campaign flags the residual unknown class.",
+      "source_name": "AktI-Tech curated pack",
+      "source_url": "https://github.com/AktI-Tech/network-guardian",
+      "confidence": "low"
+    },
+    {
+      "id": "akti-sa-bank-phish-builders",
+      "title": "South Asia banking phish via browser (builder laptops)",
+      "severity": "watch",
+      "countries": ["NP", "IN", "BD"],
+      "sectors": ["Finance / Banking", "Builders / Tech"],
+      "summary": "Personal banking phishing remains high volume. On builder PCs, browser processes to never-before-seen domains around payroll time are worth a glance.",
+      "source_name": "AktI-Tech curated pack",
+      "source_url": "https://github.com/AktI-Tech/network-guardian",
+      "confidence": "low"
+    }
+  ],
+  "iocs": [
+    {
+      "ioc_type": "domain",
+      "value": "npmjs-registry-cdn.example",
+      "tags": ["typosquat", "builders", "curated"],
+      "source": "akti-builders-v1",
+      "notes": "Fictional typosquat-style domain for correlator demos — will not match real traffic."
+    },
+    {
+      "ioc_type": "domain",
+      "value": "pypi-packages-mirror.example",
+      "tags": ["typosquat", "python", "curated"],
+      "source": "akti-builders-v1",
+      "notes": "Fictional PyPI mirror lure for demos."
+    },
+    {
+      "ioc_type": "ip",
+      "value": "198.51.100.66",
+      "tags": ["c2-shaped", "documentation", "curated"],
+      "source": "akti-builders-v1",
+      "notes": "TEST-NET-2 documentation IP for safe correlation demos (RFC 5737)."
+    },
+    {
+      "ioc_type": "ip",
+      "value": "203.0.113.77",
+      "tags": ["c2-shaped", "documentation", "curated"],
+      "source": "akti-builders-v1",
+      "notes": "TEST-NET-3 documentation IP for safe correlation demos (RFC 5737)."
+    },
+    {
+      "ioc_type": "domain",
+      "value": "update-electron-builder.example",
+      "tags": ["supply-chain", "desktop", "curated"],
+      "source": "akti-builders-v1",
+      "notes": "Fictional auto-update host often imitated by malware; demo-only."
+    },
+    {
+      "ioc_type": "domain",
+      "value": "evil-phish-bank-sa.example",
+      "tags": ["phishing", "finance", "curated"],
+      "source": "akti-builders-v1",
+      "notes": "Shared fictional phish domain with sample pack for merge/dedupe testing."
+    }
+  ],
+  "sources": [
+    {
+      "name": "AktI-Tech curated builders pack v1",
+      "url": "intel/packs/akti-builders-v1.json",
+      "kind": "curated",
+      "note": "Shipped with NetworkGuardian. Drop updated JSON in intel/packs/ to refresh without rebuild. No auto-network."
+    },
+    {
+      "name": "CERT-In (India) — link only",
+      "url": "https://www.cert-in.org.in/",
+      "kind": "cert_link",
+      "note": "Authoritative regional advisories; not auto-ingested."
+    },
+    {
+      "name": "NCSC Nepal — link only",
+      "url": "https://www.nepalpolice.gov.np/",
+      "kind": "cert_link",
+      "note": "Local LE / cybercrime reporting context; not an automated feed."
+    }
+  ]
+}

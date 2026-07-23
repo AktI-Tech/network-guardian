@@ -11,7 +11,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const CACHE_DIR: &str = "intel/cache";
 const DEFAULT_UA: &str =
-    "NetworkGuardian/0.9 (+https://github.com/AktI-Tech/network-guardian; pull-only; no-upload)";
+    "NetworkGuardian/0.10 (+https://github.com/AktI-Tech/network-guardian; pull-only; no-upload)";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeedsConfig {

@@ -7,6 +7,7 @@ mod daemon;
 mod destinations;
 mod feeds;
 mod mcp;
+mod packs;
 mod models;
 mod network_monitor;
 mod notifications;
@@ -58,6 +59,7 @@ enum Command {
     Rules,
     Region,
     RegionRefresh,
+    RegionPacks,
     Autostart {
         action: AutostartAction,
     },
@@ -120,6 +122,7 @@ async fn main() {
         Command::Rules => print_rules(),
         Command::Region => print_region(Some(&db)),
         Command::RegionRefresh => print_region_refresh(Some(&db)),
+        Command::RegionPacks => print_region_packs(),
         Command::Autostart { action } => run_autostart(action),
         Command::Stats => print_stats(&db),
         Command::Recent(limit) => print_recent(&db, limit),
@@ -147,9 +150,10 @@ fn parse_command(args: Vec<String>) -> Result<Command, String> {
         "rules" => Ok(Command::Rules),
         "region" => match args.get(1).map(|s| s.as_str()) {
             Some("refresh") | Some("--refresh") => Ok(Command::RegionRefresh),
+            Some("packs") | Some("pack") | Some("list-packs") => Ok(Command::RegionPacks),
             None | Some("show") | Some("status") => Ok(Command::Region),
             Some(other) => Err(format!(
-                "unknown region action '{other}' (use region | region refresh)"
+                "unknown region action '{other}' (use region | region refresh | region packs)"
             )),
         },
         "autostart" => {
@@ -557,6 +561,36 @@ fn print_region_refresh(db: Option<&ThreatDatabase>) {
     print_region_inner(db, true);
 }
 
+fn print_region_packs() {
+    let (cfg, list) = crate::region::list_packs();
+    println!("📦 Local threat packs (R5)");
+    println!(
+        "   Directory: {}  Enabled: {}  Include sample: {}",
+        cfg.directory, cfg.enabled, cfg.include_sample
+    );
+    if !cfg.prefer.is_empty() {
+        println!("   Prefer: {}", cfg.prefer.join(", "));
+    }
+    println!("   Env override: NG_REGION_PACKS=0|1");
+    if list.is_empty() {
+        println!("\n   (no *.json packs found — drop files under {})", cfg.directory);
+        return;
+    }
+    println!();
+    for p in list {
+        let flag = if p.loaded { "load" } else { "skip" };
+        println!(
+            "   [{flag}] {}  v{}  kind={}  iocs={} campaigns={}",
+            p.id, p.version, p.kind, p.ioc_count, p.campaign_count
+        );
+        println!("         {} — {}", p.path, p.message);
+        if !p.curator.is_empty() {
+            println!("         curator: {}  name: {}", p.curator, p.name);
+        }
+    }
+    println!("\nTip: region (no args) shows the merged snapshot used for correlation.");
+}
+
 fn print_region_inner(db: Option<&ThreatDatabase>, force_feeds: bool) {
     let rules = RuleConfig::load(None);
     let snap = crate::region::snapshot_with_local_opts(db, &rules.process_watchlist, force_feeds);
@@ -568,11 +602,21 @@ fn print_region_inner(db: Option<&ThreatDatabase>, force_feeds: bool) {
         snap.enabled
     );
     println!(
-        "   Sample pack: {}  Live feeds: {}",
-        snap.is_sample, snap.feeds_enabled
+        "   Sample-only: {}  Local packs: {}  Live feeds: {}",
+        snap.is_sample, snap.packs_enabled, snap.feeds_enabled
     );
     println!("\n{}", snap.summary);
     println!("\nDisclaimer: {}", snap.disclaimer);
+    if !snap.packs_loaded.is_empty() {
+        println!("\nLocal packs:");
+        for p in &snap.packs_loaded {
+            let flag = if p.loaded { "ok" } else { "--" };
+            println!(
+                "   [{flag}] {} v{} ({}) iocs={}  {}",
+                p.id, p.version, p.kind, p.ioc_count, p.message
+            );
+        }
+    }
     if !snap.feed_pulls.is_empty() {
         println!("\nFeed pulls:");
         for p in &snap.feed_pulls {
@@ -1083,7 +1127,7 @@ fn print_usage() {
     println!("  connections                 One-shot process → destination table");
     println!("  stack                       WSL distros, Docker containers, adapter tags");
     println!("  rules                       Show loaded YAML policy (v3: allow/deny/CIDR/custom)");
-    println!("  region [refresh]            Nepal/South Asia radar; refresh = force feed pull");
+    println!("  region [refresh|packs]      Nepal/South Asia radar; refresh=force feed pull; packs=list local packs");
     println!("  monitor                     Live packet monitor (needs --features packet-capture)");
     println!("  stats                       Show threat + connection summary");
     println!("  recent [limit]              Show recent alerts");

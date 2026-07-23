@@ -1,9 +1,10 @@
-//! Regional threat radar (R1 snapshot + R2 opt-in live feeds + R4 local correlation).
+//! Regional threat radar (R1 sample + R2 live feeds + R4 local correlation + R5 packs).
 //!
-//! Privacy: local sample pack by default. Live feeds are **pull-only** HTTP GETs
+//! Privacy: local sample + curated packs by default. Live feeds are **pull-only** HTTP GETs
 //! (never upload connections). Opt out via `intel/region.yml` or `NG_REGION_ENABLED=0`.
 
 use crate::feeds::{self, FeedPullStatus, FeedsConfig};
+use crate::packs::{self, LoadedPack, PacksConfig};
 use crate::models::{ConnectionSample, DestinationCategory};
 use crate::sensors::connections;
 use crate::threat_database::{DestinationRecord, ThreatDatabase};
@@ -34,6 +35,8 @@ pub struct RegionConfig {
     #[serde(default = "default_ttl")]
     pub cache_ttl_minutes: u32,
     #[serde(default)]
+    pub packs: PacksConfig,
+    #[serde(default)]
     pub feeds: FeedsConfig,
 }
 
@@ -57,6 +60,7 @@ impl Default for RegionConfig {
             region_code: default_region(),
             scope: default_scope(),
             cache_ttl_minutes: default_ttl(),
+            packs: PacksConfig::default(),
             feeds: FeedsConfig::default(),
         }
     }
@@ -209,7 +213,11 @@ pub struct RegionalSnapshot {
     pub summary: String,
     pub generated_at: String,
     pub loaded_at: String,
+    /// True only when no curated pack and no live feed contributed (sample-only).
     pub is_sample: bool,
+    /// Local curated packs enabled (R5).
+    pub packs_enabled: bool,
+    pub packs_loaded: Vec<LoadedPack>,
     /// Live feed pulls attempted (R2); empty when feeds disabled.
     pub feeds_enabled: bool,
     pub feed_pulls: Vec<FeedPullStatus>,
@@ -232,6 +240,8 @@ impl RegionalSnapshot {
             generated_at: Local::now().to_rfc3339(),
             loaded_at: Local::now().to_rfc3339(),
             is_sample: true,
+            packs_enabled: false,
+            packs_loaded: vec![],
             feeds_enabled: false,
             feed_pulls: vec![],
             industries: vec![],
@@ -298,40 +308,95 @@ pub fn snapshot_with_local_opts(
 }
 
 fn load_base_snapshot(cfg: &RegionConfig, force_feeds: bool) -> RegionalSnapshot {
-    // Prefer disk pack so operators can drop updated JSON without rebuild.
-    let file = if Path::new("intel/np_sa_sample.json").exists() {
-        std::fs::read_to_string("intel/np_sa_sample.json").ok()
+    // Layer 1 — sample pack (embedded or disk) when include_sample.
+    let include_sample = cfg.packs.include_sample;
+    let mut parsed = if include_sample {
+        let file = if Path::new("intel/np_sa_sample.json").exists() {
+            std::fs::read_to_string("intel/np_sa_sample.json").ok()
+        } else {
+            None
+        };
+        let text = file.as_deref().unwrap_or(EMBEDDED_SNAPSHOT);
+        serde_json::from_str(text).unwrap_or_else(|_| {
+            serde_json::from_str(EMBEDDED_SNAPSHOT).expect("embedded snapshot valid")
+        })
     } else {
-        None
+        SnapshotFile {
+            schema_version: 1,
+            region_code: cfg.region_code.clone(),
+            scope: cfg.scope.clone(),
+            status: "watch".into(),
+            summary: "Sample base disabled (packs.include_sample: false).".into(),
+            generated_at: Local::now().to_rfc3339(),
+            industries: vec![],
+            campaigns: vec![],
+            iocs: vec![],
+            sources: vec![],
+        }
     };
-    let text = file.as_deref().unwrap_or(EMBEDDED_SNAPSHOT);
-    let parsed: SnapshotFile = serde_json::from_str(text).unwrap_or_else(|_| {
-        serde_json::from_str(EMBEDDED_SNAPSHOT).expect("embedded snapshot valid")
-    });
 
-    let merge = feeds::pull_and_merge(&cfg.feeds, force_feeds);
-    let feeds_on = feeds::feeds_enabled(&cfg.feeds);
+    // Layer 2 — local curated packs (R5), no network.
+    let pack_merge = packs::load_and_merge(&cfg.packs);
+    let packs_on = packs::packs_enabled(&cfg.packs);
 
     let mut iocs = parsed.iocs;
     let mut campaigns = parsed.campaigns;
+    let mut industries = parsed.industries;
     let mut sources = parsed.sources;
     let mut status = RegionalStatus::from_str_lossy(&parsed.status);
     let mut summary = parsed.summary;
-    let mut is_sample = true;
+    let mut region_code = if parsed.region_code.is_empty() {
+        cfg.region_code.clone()
+    } else {
+        parsed.region_code
+    };
+    let mut scope = if parsed.scope.is_empty() {
+        cfg.scope.clone()
+    } else {
+        parsed.scope
+    };
+
+    if !pack_merge.iocs.is_empty() || pack_merge.any_curated {
+        iocs.extend(pack_merge.iocs);
+        campaigns.extend(pack_merge.campaigns);
+        for ind in pack_merge.industries {
+            if let Some(existing) = industries
+                .iter_mut()
+                .find(|e| e.name.eq_ignore_ascii_case(&ind.name))
+            {
+                if ind.score > existing.score {
+                    *existing = ind;
+                }
+            } else {
+                industries.push(ind);
+            }
+        }
+        sources.extend(pack_merge.sources);
+        if let Some(s) = pack_merge.status {
+            status = RegionalStatus::from_str_lossy(&s);
+        }
+        if let Some(s) = pack_merge.summary {
+            summary = s;
+        }
+        if let Some(r) = pack_merge.region_code {
+            region_code = r;
+        }
+        if let Some(s) = pack_merge.scope {
+            scope = s;
+        }
+    } else if packs_on {
+        sources.extend(pack_merge.sources);
+    }
+
+    // Layer 3 — opt-in live feeds (R2).
+    let merge = feeds::pull_and_merge(&cfg.feeds, force_feeds);
+    let feeds_on = feeds::feeds_enabled(&cfg.feeds);
+
+    let mut is_sample = !pack_merge.any_curated && !merge.any_live;
 
     if merge.any_live {
         is_sample = false;
         iocs.extend(merge.iocs);
-        // Dedupe IoCs
-        let mut seen = HashSet::new();
-        iocs.retain(|i| {
-            let k = format!(
-                "{}|{}",
-                i.ioc_type.to_ascii_lowercase(),
-                i.value.to_ascii_lowercase()
-            );
-            seen.insert(k)
-        });
         if !merge.campaigns.is_empty() {
             campaigns.extend(merge.campaigns);
         }
@@ -343,8 +408,24 @@ fn load_base_snapshot(cfg: &RegionConfig, force_feeds: bool) -> RegionalSnapshot
             summary = s;
         }
     } else if feeds_on {
-        // feeds on but nothing pulled — still sample
         sources.extend(merge.sources);
+    }
+
+    // Dedupe IoCs / campaigns after all layers
+    {
+        let mut seen = HashSet::new();
+        iocs.retain(|i| {
+            let k = format!(
+                "{}|{}",
+                i.ioc_type.to_ascii_lowercase(),
+                i.value.to_ascii_lowercase()
+            );
+            seen.insert(k)
+        });
+    }
+    {
+        let mut seen = HashSet::new();
+        campaigns.retain(|c| seen.insert(c.id.to_ascii_lowercase()));
     }
 
     // Always surface feed pull diagnostics
@@ -359,34 +440,36 @@ fn load_base_snapshot(cfg: &RegionConfig, force_feeds: bool) -> RegionalSnapshot
         }
     }
 
-    let disclaimer = if is_sample {
-        "OSINT-style sample pack + optional live pulls. Not an official CERT feed. Connection data never leaves this PC."
-            .into()
+    let disclaimer = if pack_merge.any_curated && merge.any_live {
+        "Merged sample + curated AktI-Tech/operator packs + opt-in live feeds (HTTP GET only). Not an official CERT. Connection data never leaves this PC.".into()
+    } else if pack_merge.any_curated {
+        "Local curated packs (R5) over sample base. No network for packs. Not an official CERT. Connection data never leaves this PC.".into()
+    } else if merge.any_live {
+        "Merged local sample pack with opt-in live feed pulls (HTTP GET only). Connection data never leaves this PC.".into()
     } else {
-        "Merged local sample pack with opt-in live feed pulls (HTTP GET only). Connection data never leaves this PC."
-            .into()
+        "OSINT-style sample pack + optional local packs / live pulls. Not an official CERT feed. Connection data never leaves this PC.".into()
+    };
+
+    let generated_at = if parsed.generated_at.is_empty() {
+        Local::now().to_rfc3339()
+    } else {
+        std::mem::take(&mut parsed.generated_at)
     };
 
     RegionalSnapshot {
         enabled: true,
-        region_code: if parsed.region_code.is_empty() {
-            cfg.region_code.clone()
-        } else {
-            parsed.region_code
-        },
-        scope: if parsed.scope.is_empty() {
-            cfg.scope.clone()
-        } else {
-            parsed.scope
-        },
+        region_code,
+        scope,
         status: status.as_str().into(),
         summary,
-        generated_at: parsed.generated_at,
+        generated_at,
         loaded_at: Local::now().to_rfc3339(),
         is_sample,
+        packs_enabled: packs_on,
+        packs_loaded: pack_merge.packs,
         feeds_enabled: feeds_on,
         feed_pulls: merge.pulls,
-        industries: parsed.industries,
+        industries,
         campaigns,
         iocs,
         sources,
@@ -400,6 +483,13 @@ fn load_base_snapshot(cfg: &RegionConfig, force_feeds: bool) -> RegionalSnapshot
         },
         disclaimer,
     }
+}
+
+/// List available local packs (for `region packs` CLI).
+pub fn list_packs() -> (PacksConfig, Vec<LoadedPack>) {
+    let cfg = RegionConfig::load();
+    let list = packs::list_available(&cfg.packs);
+    (cfg.packs, list)
 }
 
 /// R4: intersect IoCs with live connections and known destinations.
@@ -629,14 +719,39 @@ mod tests {
 
     #[test]
     fn loads_embedded_snapshot() {
-        let cfg = RegionConfig::default();
+        // Isolate from on-disk curated packs for a stable sample-only base.
+        std::env::remove_var("NG_REGION_PACKS");
+        let mut cfg = RegionConfig::default();
+        cfg.packs.enabled = false;
         let s = load_base_snapshot(&cfg, false);
         assert!(s.enabled);
         assert!(!s.campaigns.is_empty());
         assert!(!s.industries.is_empty());
         assert!(!s.iocs.is_empty());
         assert!(s.is_sample);
+        assert!(!s.packs_enabled);
         assert!(!s.feeds_enabled);
+    }
+
+    #[test]
+    fn curated_pack_marks_non_sample_when_present() {
+        std::env::remove_var("NG_REGION_PACKS");
+        let mut cfg = RegionConfig::default();
+        cfg.packs.enabled = true;
+        cfg.packs.directory = "intel/packs".into();
+        if !Path::new("intel/packs/akti-builders-v1.json").exists() {
+            // CI without pack files: skip soft
+            return;
+        }
+        let s = load_base_snapshot(&cfg, false);
+        assert!(s.packs_enabled);
+        assert!(
+            s.packs_loaded.iter().any(|p| p.loaded && p.id == "akti-builders-v1"),
+            "expected akti-builders-v1 loaded: {:?}",
+            s.packs_loaded
+        );
+        assert!(!s.is_sample);
+        assert!(s.iocs.iter().any(|i| i.source == "akti-builders-v1"));
     }
 
     #[test]

@@ -1,6 +1,7 @@
 # Regional threat radar — opt-in situational awareness
 # Privacy: connection data never leaves this PC.
 # Live feeds (R2) are HTTP GET pull-only and disabled by default.
+# Curated packs (R5) load from intel/packs/ with no network.
 
 enabled: true
 region_code: "NP"
@@ -8,13 +9,24 @@ scope: "south_asia"
 # In-memory snapshot reuse (minutes); feed HTTP cache uses feeds.refresh_minutes
 cache_ttl_minutes: 60
 
+# R5 — local curated / operator packs (no HTTP)
+packs:
+  enabled: true
+  directory: intel/packs
+  # Empty = load every *.json in directory. Or list pack_id / file stems:
+  # prefer:
+  #   - akti-builders-v1
+  prefer: []
+  # Keep sample pack (intel/np_sa_sample.json) as base layer under curated packs
+  include_sample: true
+
 feeds:
   # Set true (or NG_REGION_FEEDS=1) to pull configured sources.
   # Or set NG_REGION_FEED_URL=https://…/pack.json for a single JSON pack.
   enabled: false
   refresh_minutes: 360
   timeout_secs: 15
-  # user_agent: "NetworkGuardian/0.9 (local-only)"
+  # user_agent: "NetworkGuardian/0.10 (local-only)"
   sources:
     # Example JSON pack (same schema as intel/np_sa_sample.json):
     # - name: operator-pack
