@@ -44,6 +44,7 @@ network_guardian connections          # one-shot process → dest table
 network_guardian stack                # WSL + Docker (containers, networks, host-port exposure)
 network_guardian rules                # show YAML policy (v3 allow/deny/CIDR/custom)
 network_guardian region               # Nepal/South Asia radar + local IoC exposure
+network_guardian region packs         # list local curated packs (R5, no network)
 network_guardian region refresh       # force opt-in live feed pull (HTTP GET only)
 network_guardian mcp                  # MCP stdio server for IDE agents
 network_guardian stats
@@ -88,7 +89,7 @@ Tools (read-only): `security_summary`, `list_active_connections`, `list_alerts`,
 - **Reverse DNS** (cached) so CDN IPs can map to known hosts / labels
 - **Stack hints**: `wsl`, `docker`, `llm-local` from process names + env probe
 - **YAML rules v3** (`rules/default.yml`): first-seen, process allow/watch, destination allow/deny, CIDR, custom match rules, fan-out, ports
-- **Regional radar** (Nepal / South Asia): sample pack + **opt-in live feeds** (pull-only HTTP, disk cache) + local IoC exposure
+- **Regional radar** (Nepal / South Asia): sample pack + **curated local packs (R5)** under `intel/packs/` + **opt-in live feeds** (pull-only HTTP, disk cache) + local IoC exposure
 - **Windows tray + autostart**: `serve --tray`, `autostart enable|disable|status` (HKCU Run)
 - **MCP stdio server** for coding agents
 - **SSE** live ticks (`/api/events`) + dashboard
@@ -101,8 +102,8 @@ Tools (read-only): `security_summary`, `list_active_connections`, `list_alerts`,
 
 | Phase | Focus |
 |-------|--------|
-| Now | Dashboard + rules v3 + MCP + Docker exposure + opt-in feeds |
-| Next | Curated AktI-Tech packs (R5), headless tray polish |
+| Now | Dashboard + rules v3 + MCP + Docker exposure + feeds + curated packs (R5) |
+| Next | Headless tray polish, pack auto-update channel (optional) |
 | Later | Mobile companion, Microsoft new-device / ARM64 clients |
 
 ## Project layout
@@ -119,6 +120,8 @@ src/
   packet_capture.rs    Optional pcap path
   threat_database.rs   SQLite
 rules/default.yml      Default policy rules
+intel/region.yml       Regional radar + packs + feed config
+intel/packs/           Curated local threat packs (R5, no network)
 web/                   Dashboard assets (embedded at build)
 ```
 

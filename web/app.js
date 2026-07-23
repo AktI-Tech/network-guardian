@@ -67,14 +67,20 @@
     const st = (r.status || "watch").toLowerCase();
     $("region-status").className = "region-status " + st;
     $("region-status").textContent = st;
+    const packCount = (r.packs_loaded || []).filter((p) => p.loaded).length;
+    const packTag = r.packs_enabled
+      ? packCount
+        ? ` · ${packCount} pack${packCount === 1 ? "" : "s"}`
+        : " · packs on"
+      : "";
     const feedTag = r.feeds_enabled
       ? r.is_sample
         ? " · feeds on (sample fallback)"
         : " · live feeds"
       : r.is_sample
-        ? " · sample pack"
+        ? " · sample only"
         : "";
-    $("region-meta").textContent = `${r.region_code || "NP"} · ${r.scope || "south_asia"}${feedTag} · loaded ${esc(
+    $("region-meta").textContent = `${r.region_code || "NP"} · ${r.scope || "south_asia"}${packTag}${feedTag} · loaded ${esc(
       shortTime(r.loaded_at)
     )}`;
     $("region-summary").textContent = r.summary || "";
@@ -144,6 +150,26 @@
     $("region-sources").textContent = sources.length
       ? "Sources: " + sources.map((s) => s.name).join(" · ")
       : "";
+
+    const packs = r.packs_loaded || [];
+    $("region-packs").innerHTML = packs.length
+      ? packs
+          .map((p) => {
+            const st = p.loaded ? "loaded" : p.kind === "disabled" ? "off" : "skip";
+            return `<tr>
+        <td title="${esc(p.path || "")}">${esc(p.id || p.name || "—")}</td>
+        <td>${esc(p.version || "—")}</td>
+        <td>${esc(p.kind || "—")}</td>
+        <td>${esc(String(p.ioc_count ?? 0))}</td>
+        <td title="${esc(p.message || "")}">${esc(st)}</td>
+      </tr>`;
+          })
+          .join("")
+      : `<tr><td colspan="5" class="muted">${
+          r.packs_enabled
+            ? "No packs in intel/packs/ — drop *.json or ship akti-builders-v1"
+            : "Local packs off — set packs.enabled in intel/region.yml or NG_REGION_PACKS=1"
+        }</td></tr>`;
 
     const pulls = r.feed_pulls || [];
     $("region-feeds").innerHTML = pulls.length
