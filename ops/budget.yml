@@ -1,0 +1,32 @@
+# Multi-role session budgets for Guardian Ops.
+# Display + playbook only — not enforced by the network_guardian binary.
+# Adjust shares freely; coding_hobbies floor is the hard personal rule.
+
+version: 1
+
+floors:
+  # Never schedule a day that leaves coding/hobbies below this share of planned tokens.
+  coding_hobbies: 0.10
+
+roles:
+  security_guardian: 0.30
+  marketing_imagen: 0.45
+  coding_hobbies: 0.15
+  reserve: 0.10
+
+session:
+  max_hours_per_day: 3
+  preferred_windows:
+    - morning
+    - evening
+  # Suggested wall-clock blocks when balance is healthy (minutes)
+  blocks_minutes:
+    security_guardian: 45
+    marketing_imagen: 90
+    coding_hobbies: 45
+    closeout: 10
+
+notes: |
+  Floor first: if balance is low, protect coding_hobbies before marketing.
+  Timebox by role — avoid one infinite mixed chat.
+  Security agents are read-only via MCP; you approve any rule/pack changes.

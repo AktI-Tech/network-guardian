@@ -77,7 +77,7 @@ cargo run --release --features packet-capture -- monitor
 }
 ```
 
-Tools (read-only): `security_summary`, `list_active_connections`, `list_alerts`, `destination_category`, `builder_stack`, `list_rules`, `regional_threat_summary`.
+Tools (read-only): `security_summary`, `list_active_connections`, `list_alerts`, `destination_category`, `builder_stack`, `list_rules`, `regional_threat_summary`, `budget_policy`.
 
 ## What works today
 
@@ -91,18 +91,28 @@ Tools (read-only): `security_summary`, `list_active_connections`, `list_alerts`,
 - **YAML rules v3** (`rules/default.yml`): first-seen, process allow/watch, destination allow/deny, CIDR, custom match rules, fan-out, ports
 - **Regional radar** (Nepal / South Asia): sample pack + **curated local packs (R5)** under `intel/packs/` + **opt-in live feeds** (pull-only HTTP, disk cache) + local IoC exposure
 - **Windows tray + autostart**: `serve --tray`, `autostart enable|disable|status` (HKCU Run)
-- **MCP stdio server** for coding agents
+- **MCP stdio server** for coding agents (includes `budget_policy`)
+- **Guardian Ops**: dashboard Ops tab, `/api/ops`, multi-role budgets (display-only)
 - **SSE** live ticks (`/api/events`) + dashboard
 - **Suricata EVE** optional ingest (`--eve`)
 - **SQLite** store: connections, destinations, processes, alerts
 - **Local web dashboard** with WSL/Docker pills
 - Optional **Npcap** packet path with corrected Ethernet/IP parse
 
+## Guardian Ops (agents + budgets)
+
+Long multi-role sessions (security · marketing/imagen · coding/hobbies) sit **beside** the binary, not inside a second app:
+
+- Sensors + MCP + dashboard = local nervous system (`serve`, `mcp`, `:8787`)
+- Session playbooks + token floors = `ops/` (see [`ops/README.md`](ops/README.md))
+- Dashboard **Ops** tab + `/api/ops` + MCP `budget_policy` (display-only budgets)
+- Default split keeps **≥10% tokens for coding/hobbies**; security agents stay **read-only** via MCP
+
 ## Roadmap (short)
 
 | Phase | Focus |
 |-------|--------|
-| Now | Dashboard + rules v3 + MCP + Docker exposure + feeds + curated packs (R5) |
+| Now | Dashboard Ops tab + MCP `budget_policy` + rules v3 + feeds + curated packs (R5) + playbooks |
 | Next | Headless tray polish, pack auto-update channel (optional) |
 | Later | Mobile companion, Microsoft new-device / ARM64 clients |
 
@@ -117,11 +127,14 @@ src/
   rules.rs             YAML-backed policy engine
   suricata.rs          Optional EVE JSON ingest
   api.rs               Loopback HTTP API + SSE
+  ops.rs               Guardian Ops budgets + session digests
   packet_capture.rs    Optional pcap path
   threat_database.rs   SQLite
 rules/default.yml      Default policy rules
 intel/region.yml       Regional radar + packs + feed config
 intel/packs/           Curated local threat packs (R5, no network)
+intel/sessions/        Optional local agent digests (gitignored)
+ops/                   Multi-role budgets + agent preambles (playbook)
 web/                   Dashboard assets (embedded at build)
 ```
 

@@ -146,6 +146,11 @@ fn tool_defs() -> Value {
             "name": "regional_threat_summary",
             "description": "Nepal/South Asia threat radar snapshot plus local IoC exposure on this PC.",
             "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "budget_policy",
+            "description": "Guardian Ops multi-role token budgets (ops/budget.yml) + MCP tool list. Display/playbook only — not enforced by the binary.",
+            "inputSchema": { "type": "object", "properties": {} }
         }
     ])
 }
@@ -192,6 +197,7 @@ fn call_tool(name: &str, args: &Value, db: &ThreatDatabase) -> Result<Value, Str
             let snap = crate::region::snapshot_with_local(Some(db), &rules.process_watchlist);
             Ok(tool_text(serde_json::to_value(snap).unwrap_or(json!({}))))
         }
+        "budget_policy" => Ok(tool_text(crate::ops::budget_policy_json())),
         "list_active_connections" => {
             let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
             let llm_only = args

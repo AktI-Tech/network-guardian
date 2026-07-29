@@ -11,6 +11,7 @@ mod packs;
 mod models;
 mod network_monitor;
 mod notifications;
+mod ops;
 mod packet_capture;
 mod region;
 mod rules;
