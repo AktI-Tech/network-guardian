@@ -98,12 +98,20 @@ Tools (read-only): `security_summary`, `list_active_connections`, `list_alerts`,
 - **Local web dashboard** with WSL/Docker pills
 - Optional **Npcap** packet path with corrected Ethernet/IP parse
 
+## Guardian Ops (agents + budgets)
+
+Long multi-role sessions (security · marketing/imagen · coding/hobbies) sit **beside** the binary, not inside a second app:
+
+- Sensors + MCP + dashboard = local nervous system (`serve`, `mcp`, `:8787`)
+- Session playbooks + token floors = `ops/` (see [`ops/README.md`](ops/README.md))
+- Default split keeps **≥10% tokens for coding/hobbies**; security agents stay **read-only** via MCP
+
 ## Roadmap (short)
 
 | Phase | Focus |
 |-------|--------|
-| Now | Dashboard + rules v3 + MCP + Docker exposure + feeds + curated packs (R5) |
-| Next | Headless tray polish, pack auto-update channel (optional) |
+| Now | Dashboard + rules v3 + MCP + Docker exposure + feeds + curated packs (R5) + ops playbooks |
+| Next | Headless tray polish, pack auto-update channel (optional), Ops tab / budget MCP |
 | Later | Mobile companion, Microsoft new-device / ARM64 clients |
 
 ## Project layout
@@ -122,6 +130,8 @@ src/
 rules/default.yml      Default policy rules
 intel/region.yml       Regional radar + packs + feed config
 intel/packs/           Curated local threat packs (R5, no network)
+intel/sessions/        Optional local agent digests (gitignored)
+ops/                   Multi-role budgets + agent preambles (playbook)
 web/                   Dashboard assets (embedded at build)
 ```
 
