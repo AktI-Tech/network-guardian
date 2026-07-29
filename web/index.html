@@ -35,6 +35,7 @@
     <button class="tab" data-tab="alerts">Alerts</button>
     <button class="tab" data-tab="region">Region</button>
     <button class="tab" data-tab="rules">Rules</button>
+    <button class="tab" data-tab="ops">Ops</button>
   </nav>
 
   <main>
@@ -239,6 +240,41 @@
             <h3>Suspicious ports</h3>
             <p id="rules-ports" class="stack-notes"></p>
             <p class="stack-notes">Edit <code>rules/default.yml</code> and restart <code>serve</code> to apply. v3: dest allow/deny, CIDR, custom match rules.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-ops" class="panel">
+      <div class="ops-panel">
+        <div class="rules-summary" id="ops-summary">Loading Guardian Ops…</div>
+        <p class="stack-notes" id="ops-notes"></p>
+        <div class="cards region-cards" id="ops-role-cards"></div>
+        <div class="stack-grid">
+          <div class="stack-block">
+            <h3>Session blocks</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Role</th><th>~Minutes</th><th>Share</th></tr></thead>
+                <tbody id="ops-blocks"></tbody>
+              </table>
+            </div>
+            <p class="stack-notes" id="ops-session-meta"></p>
+          </div>
+          <div class="stack-block">
+            <h3>MCP tools (read-only)</h3>
+            <ul class="rules-list" id="ops-mcp-tools"></ul>
+            <p class="stack-notes" id="ops-mcp-cmd"></p>
+          </div>
+          <div class="stack-block">
+            <h3>Playbook files</h3>
+            <ul class="rules-list" id="ops-preambles"></ul>
+          </div>
+          <div class="stack-block full">
+            <h3>Last session digest</h3>
+            <p class="stack-notes" id="ops-digest-meta"></p>
+            <pre class="ops-digest" id="ops-digest">—</pre>
+            <p class="stack-notes">Write notes under <code>intel/sessions/</code> (gitignored). Budgets: <code>ops/budget.yml</code>.</p>
           </div>
         </div>
       </div>

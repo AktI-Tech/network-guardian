@@ -243,6 +243,22 @@ tbody tr:hover { background: rgba(61, 156, 240, 0.06); }
 }
 .rules-list li { margin: 0.25rem 0; }
 
+.ops-panel { padding: 0.5rem 0 0; }
+.ops-digest {
+  margin: 0.5rem 0 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+}
+
 footer {
   display: flex;
   justify-content: space-between;

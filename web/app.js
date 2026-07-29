@@ -6,6 +6,7 @@
   let stackEnv = null;
   let rulesCfg = null;
   let regionSnap = null;
+  let opsSnap = null;
 
   document.querySelectorAll(".tab").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -427,6 +428,93 @@
     return `${s}s`;
   }
 
+  function pct(n) {
+    if (n == null || Number.isNaN(Number(n))) return "—";
+    return Math.round(Number(n) * 100) + "%";
+  }
+
+  function renderOps() {
+    const o = opsSnap;
+    if (!o) {
+      $("ops-summary").textContent = "Guardian Ops unavailable";
+      $("ops-notes").textContent = "Could not load /api/ops";
+      $("ops-role-cards").innerHTML = "";
+      $("ops-blocks").innerHTML = "";
+      $("ops-mcp-tools").innerHTML = "";
+      $("ops-preambles").innerHTML = "";
+      $("ops-digest").textContent = "—";
+      $("ops-digest-meta").textContent = "";
+      $("ops-mcp-cmd").textContent = "";
+      $("ops-session-meta").textContent = "";
+      return;
+    }
+    const b = o.budget || {};
+    const roles = b.roles || {};
+    const floors = b.floors || {};
+    const session = b.session || {};
+    const blocks = session.blocks_minutes || {};
+    $("ops-summary").textContent =
+      `Guardian Ops · budget ${o.budget_source || "?"} · enforced=${o.enforced ? "yes" : "no"} · floor coding≥${pct(
+        floors.coding_hobbies
+      )} · path ${o.budget_path || "ops/budget.yml"}`;
+    $("ops-notes").textContent = o.notes || b.notes || "";
+
+    const roleCards = [
+      ["Security", roles.security_guardian],
+      ["Marketing / imagen", roles.marketing_imagen],
+      ["Coding / hobbies", roles.coding_hobbies],
+      ["Reserve", roles.reserve],
+    ];
+    $("ops-role-cards").innerHTML = roleCards
+      .map(
+        ([label, share]) => `<div class="card"><div class="label">${esc(label)}</div><div class="value">${pct(
+          share
+        )}</div></div>`
+      )
+      .join("");
+
+    const blockRows = [
+      ["security_guardian", blocks.security_guardian, roles.security_guardian],
+      ["marketing_imagen", blocks.marketing_imagen, roles.marketing_imagen],
+      ["coding_hobbies", blocks.coding_hobbies, roles.coding_hobbies],
+      ["closeout", blocks.closeout, null],
+    ];
+    $("ops-blocks").innerHTML = blockRows
+      .map(
+        ([role, mins, share]) => `<tr>
+        <td><code>${esc(role)}</code></td>
+        <td>${mins != null ? esc(String(mins)) : "—"}</td>
+        <td>${share != null ? pct(share) : "—"}</td>
+      </tr>`
+      )
+      .join("");
+    const windows = (session.preferred_windows || []).join(", ") || "—";
+    $("ops-session-meta").textContent = `max ~${session.max_hours_per_day ?? "?"}h/day · windows: ${windows}`;
+
+    const tools = o.mcp_tools || [];
+    $("ops-mcp-tools").innerHTML = tools.length
+      ? tools.map((t) => `<li><code>${esc(t)}</code></li>`).join("")
+      : "<li class='muted'>(none)</li>";
+    $("ops-mcp-cmd").textContent = o.mcp_command
+      ? `IDE: ${o.mcp_command}`
+      : "IDE: network_guardian mcp";
+
+    const preambles = o.preambles || [];
+    $("ops-preambles").innerHTML = preambles.length
+      ? preambles.map((p) => `<li><code>${esc(p)}</code></li>`).join("")
+      : "<li class='muted'>No ops/*.md on disk (embedded budget still loads)</li>";
+
+    const dig = o.last_digest;
+    if (dig) {
+      $("ops-digest-meta").textContent = `${dig.name} · ${dig.bytes || 0} bytes · ${dig.path || ""}`;
+      $("ops-digest").textContent = dig.preview || "(empty)";
+    } else {
+      $("ops-digest-meta").textContent =
+        `No digest yet — drop a markdown file in ${o.sessions_dir || "intel/sessions/"}`;
+      $("ops-digest").textContent = "—";
+    }
+  }
+
   function renderRules() {
     const r = rulesCfg;
     if (!r) {
@@ -471,7 +559,7 @@
 
   async function refresh() {
     try {
-      const [status, conn, dest, al, env, rules, region] = await Promise.all([
+      const [status, conn, dest, al, env, rules, region, ops] = await Promise.all([
         fetch("/api/status").then((r) => r.json()),
         fetch("/api/connections").then((r) => r.json()),
         fetch("/api/destinations").then((r) => r.json()),
@@ -479,6 +567,7 @@
         fetch("/api/environment").then((r) => r.json()).catch(() => null),
         fetch("/api/rules").then((r) => r.json()).catch(() => null),
         fetch("/api/region").then((r) => r.json()).catch(() => null),
+        fetch("/api/ops").then((r) => r.json()).catch(() => null),
       ]);
 
       connections = conn.connections || [];
@@ -487,6 +576,7 @@
       stackEnv = env;
       rulesCfg = rules;
       regionSnap = region;
+      opsSnap = ops;
 
       $("c-conn").textContent = String(status.connection_count ?? connections.length);
       $("c-alerts").textContent = String(status.alert_count ?? alerts.length);
@@ -502,6 +592,7 @@
       renderAlerts();
       renderRegion();
       renderRules();
+      renderOps();
     } catch (e) {
       $("status-pill").textContent = "offline";
       $("status-pill").classList.remove("live");

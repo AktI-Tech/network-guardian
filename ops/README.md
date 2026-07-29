@@ -60,9 +60,9 @@ Budgets in [`budget.yml`](budget.yml) are **discipline + display**, not enforced
 
 Write free-form notes under `intel/sessions/` (gitignored except `.gitkeep`). Example name: `2026-07-24-security.md`.
 
-## Later product hooks (not required to use this folder)
+## Product hooks (shipped)
 
-- MCP tool to serve `budget.yml` read-only
-- Dashboard **Ops** tab showing budgets + last digest + MCP tool list
+- MCP tool `budget_policy` — read-only budgets + tool list
+- Dashboard **Ops** tab + loopback `GET /api/ops` — budgets, MCP tools, last digest
 
 See main [README](../README.md) roadmap.
